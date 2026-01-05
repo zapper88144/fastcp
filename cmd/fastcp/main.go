@@ -15,6 +15,7 @@ import (
 	"github.com/rehmatworks/fastcp/internal/api"
 	"github.com/rehmatworks/fastcp/internal/caddy"
 	"github.com/rehmatworks/fastcp/internal/config"
+	"github.com/rehmatworks/fastcp/internal/database"
 	"github.com/rehmatworks/fastcp/internal/jail"
 	"github.com/rehmatworks/fastcp/internal/php"
 	"github.com/rehmatworks/fastcp/internal/sites"
@@ -126,10 +127,15 @@ func main() {
 		logger.Info("PHP instances and proxy started successfully")
 	}
 
+	// Initialize database manager
+	dbManager := database.NewManager()
+	logger.Info("Database manager initialized")
+
 	// Create API server
 	apiServer := api.NewServer(
 		siteManager,
 		phpManager,
+		dbManager,
 		caddyGen,
 		logger,
 	)

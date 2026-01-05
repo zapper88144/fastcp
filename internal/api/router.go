@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/cors"
 
 	"github.com/rehmatworks/fastcp/internal/caddy"
+	"github.com/rehmatworks/fastcp/internal/database"
 	"github.com/rehmatworks/fastcp/internal/middleware"
 	"github.com/rehmatworks/fastcp/internal/php"
 	"github.com/rehmatworks/fastcp/internal/sites"
@@ -22,6 +23,7 @@ type Server struct {
 	router       chi.Router
 	siteManager  *sites.Manager
 	phpManager   *php.Manager
+	dbManager    *database.Manager
 	caddyGen     *caddy.Generator
 	logger       *slog.Logger
 }
@@ -30,12 +32,14 @@ type Server struct {
 func NewServer(
 	siteManager *sites.Manager,
 	phpManager *php.Manager,
+	dbManager *database.Manager,
 	caddyGen *caddy.Generator,
 	logger *slog.Logger,
 ) *Server {
 	s := &Server{
 		siteManager: siteManager,
 		phpManager:  phpManager,
+		dbManager:   dbManager,
 		caddyGen:    caddyGen,
 		logger:      logger,
 	}
@@ -118,6 +122,17 @@ func (s *Server) setupRoutes() {
 				r.Post("/{version}/restart-workers", s.restartPHPWorkers)
 				r.Post("/{version}/download", s.downloadPHPVersion)
 				r.Get("/{version}/download/status", s.getDownloadStatus)
+			})
+
+			// Databases
+			r.Route("/databases", func(r chi.Router) {
+				r.Get("/", s.listDatabases)
+				r.Post("/", s.createDatabase)
+				r.Get("/status", s.getDatabaseStatus)
+				r.Post("/install", s.installMySQL)
+				r.Get("/{id}", s.getDatabase)
+				r.Delete("/{id}", s.deleteDatabase)
+				r.Post("/{id}/reset-password", s.resetDatabasePassword)
 			})
 
 			// Dashboard stats

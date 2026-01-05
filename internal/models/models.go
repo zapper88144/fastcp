@@ -142,3 +142,25 @@ type UserLimits struct {
 	MaxProcesses  int    `json:"max_processes"`   // 0 = unlimited, max concurrent processes
 }
 
+// Database represents a MySQL database
+type Database struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	SiteID    string    `json:"site_id,omitempty"` // Optional: linked site
+	Name      string    `json:"name"`
+	Username  string    `json:"username"`
+	Password  string    `json:"password,omitempty"` // Only returned on create
+	Host      string    `json:"host"`
+	Port      int       `json:"port"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// DatabaseServerStatus represents the MySQL server status
+type DatabaseServerStatus struct {
+	Installed     bool   `json:"installed"`
+	Running       bool   `json:"running"`
+	Version       string `json:"version,omitempty"`
+	DatabaseCount int    `json:"database_count"`
+}
+

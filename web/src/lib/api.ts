@@ -208,6 +208,68 @@ class APIClient {
   async fixUserPermissions(): Promise<{ message: string; users_fixed: number; errors: number }> {
     return this.request('/users/fix-permissions', { method: 'POST' })
   }
+
+  // Databases
+  async getDatabases(): Promise<{ databases: DatabaseItem[]; total: number }> {
+    return this.request('/databases')
+  }
+
+  async getDatabase(id: string): Promise<DatabaseItem> {
+    return this.request(`/databases/${id}`)
+  }
+
+  async createDatabase(data: CreateDatabaseRequest): Promise<DatabaseItem> {
+    return this.request('/databases', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteDatabase(id: string): Promise<void> {
+    await this.request(`/databases/${id}`, { method: 'DELETE' })
+  }
+
+  async resetDatabasePassword(id: string, password: string): Promise<void> {
+    await this.request(`/databases/${id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ password }),
+    })
+  }
+
+  async getDatabaseStatus(): Promise<DatabaseStatus> {
+    return this.request('/databases/status')
+  }
+
+  async installMySQL(): Promise<{ message: string }> {
+    return this.request('/databases/install', { method: 'POST' })
+  }
+}
+
+// Database types
+export interface DatabaseItem {
+  id: string
+  user_id: string
+  site_id?: string
+  name: string
+  username: string
+  password?: string
+  host: string
+  port: number
+  created_at: string
+}
+
+export interface CreateDatabaseRequest {
+  name: string
+  username?: string
+  password?: string
+  site_id?: string
+}
+
+export interface DatabaseStatus {
+  installed: boolean
+  running: boolean
+  version?: string
+  database_count: number
 }
 
 // User types

@@ -9,6 +9,7 @@ import {
   X,
   Users,
   UserX,
+  Database,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -17,6 +18,7 @@ import { useAuth } from '@/hooks/useAuth'
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Sites', href: '/sites', icon: Globe },
+  { name: 'Databases', href: '/databases', icon: Database },
   { name: 'PHP', href: '/php', icon: Server, adminOnly: true },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
   { name: 'Settings', href: '/settings', icon: Settings, adminOnly: true },

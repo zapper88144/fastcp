@@ -7,6 +7,7 @@ import { SitesPage } from '@/pages/SitesPage'
 import { SiteDetailPage } from '@/pages/SiteDetailPage'
 import { CreateSitePage } from '@/pages/CreateSitePage'
 import { PHPPage } from '@/pages/PHPPage'
+import { DatabasesPage } from '@/pages/DatabasesPage'
 import { UsersPage } from '@/pages/UsersPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 
@@ -65,6 +66,7 @@ function App() {
                 <Route path="/sites/new" element={<CreateSitePage />} />
                 <Route path="/sites/:id" element={<SiteDetailPage />} />
                 <Route path="/php" element={<PHPPage />} />
+                <Route path="/databases" element={<DatabasesPage />} />
                 <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
