@@ -1,9 +1,13 @@
 package api
 
 import (
+	"bufio"
 	"encoding/json"
 	"net/http"
+	"os"
 	"runtime"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,21 +21,77 @@ import (
 
 var startTime = time.Now()
 
+// getSystemMemory reads system memory info from /proc/meminfo (Linux)
+func getSystemMemory() (total, used int64) {
+	if runtime.GOOS != "linux" {
+		// Fallback to Go runtime stats for non-Linux
+		var mem runtime.MemStats
+		runtime.ReadMemStats(&mem)
+		return int64(mem.Sys), int64(mem.Alloc)
+	}
+
+	file, err := os.Open("/proc/meminfo")
+	if err != nil {
+		return 0, 0
+	}
+	defer file.Close()
+
+	var memTotal, memAvailable, memFree, buffers, cached int64
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := scanner.Text()
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+
+		value, err := strconv.ParseInt(fields[1], 10, 64)
+		if err != nil {
+			continue
+		}
+
+		// Values in /proc/meminfo are in KB
+		switch fields[0] {
+		case "MemTotal:":
+			memTotal = value * 1024 // Convert to bytes
+		case "MemAvailable:":
+			memAvailable = value * 1024
+		case "MemFree:":
+			memFree = value * 1024
+		case "Buffers:":
+			buffers = value * 1024
+		case "Cached:":
+			cached = value * 1024
+		}
+	}
+
+	// Calculate used memory
+	// If MemAvailable is present (Linux 3.14+), use it
+	if memAvailable > 0 {
+		used = memTotal - memAvailable
+	} else {
+		// Fallback: used = total - free - buffers - cached
+		used = memTotal - memFree - buffers - cached
+	}
+
+	return memTotal, used
+}
+
 // getStats returns dashboard statistics
 func (s *Server) getStats(w http.ResponseWriter, r *http.Request) {
 	totalSites, activeSites := s.siteManager.GetStats()
 	phpInstances := s.phpManager.GetStatus()
 
-	var mem runtime.MemStats
-	runtime.ReadMemStats(&mem)
+	memTotal, memUsed := getSystemMemory()
 
 	stats := models.Stats{
 		TotalSites:   totalSites,
 		ActiveSites:  activeSites,
 		TotalUsers:   1, // Hardcoded for now
 		PHPInstances: len(phpInstances),
-		MemoryUsage:  int64(mem.Alloc),
-		MemoryTotal:  int64(mem.Sys),
+		MemoryUsage:  memUsed,
+		MemoryTotal:  memTotal,
 		Uptime:       int64(time.Since(startTime).Seconds()),
 	}
 

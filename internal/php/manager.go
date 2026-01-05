@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -612,7 +613,7 @@ func (m *Manager) stopInstance(version string) error {
 
 // reloadInstance reloads a PHP instance via Caddy admin API
 func (m *Manager) reloadInstance(version string) error {
-	instance, ok := m.instances[version]
+	_, ok := m.instances[version]
 	if !ok {
 		return fmt.Errorf("PHP version %s not found", version)
 	}
@@ -626,21 +627,29 @@ func (m *Manager) reloadInstance(version string) error {
 		return err
 	}
 
-	// Call Caddy admin API to reload
-	url := fmt.Sprintf("http://localhost:%d/load", instance.Config.AdminPort)
+	// Use Unix socket for admin API
+	adminSocketPath := fmt.Sprintf("/var/run/fastcp/php-%s-admin.sock", version)
 	
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// Create HTTP client that uses Unix socket
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return net.Dial("unix", adminSocketPath)
+			},
+		},
+		Timeout: 30 * time.Second,
+	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(string(configData)))
+	// The URL host doesn't matter when using Unix socket, but path does
+	req, err := http.NewRequest(http.MethodPost, "http://localhost/load", strings.NewReader(string(configData)))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Content-Type", "text/caddyfile")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to connect to admin socket %s: %w", adminSocketPath, err)
 	}
 	defer resp.Body.Close()
 
