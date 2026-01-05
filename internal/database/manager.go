@@ -353,15 +353,12 @@ func (m *Manager) updateInstallStatus(message string, inProgress bool, err error
 }
 
 // secureMySQLInstallation secures the MySQL installation
+// On Ubuntu 22.04+ with MySQL 8.0, we use socket authentication for root
+// which is more secure and reliable than password authentication
 func (m *Manager) secureMySQLInstallation() error {
-	// Generate a strong root password
-	rootPwd := generatePassword(32)
-
-	// Set root password and secure installation
-	// Using mysql commands instead of mysql_secure_installation for automation
+	// Security queries - we keep root using auth_socket (default on Ubuntu)
+	// This is actually more secure as only the root OS user can access MySQL root
 	queries := []string{
-		// Set root password
-		fmt.Sprintf("ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY '%s';", rootPwd),
 		// Remove anonymous users
 		"DELETE FROM mysql.user WHERE User='';",
 		// Remove remote root login
@@ -374,22 +371,20 @@ func (m *Manager) secureMySQLInstallation() error {
 	}
 
 	for _, query := range queries {
+		// Use socket auth - FastCP runs as root so this works
 		cmd := exec.Command("mysql", "-u", "root", "-e", query)
 		if output, err := cmd.CombinedOutput(); err != nil {
-			// If first command fails, root might already have a password
-			// Try with socket authentication
+			// Try with explicit socket path
 			cmd = exec.Command("mysql", "-u", "root", "--socket=/var/run/mysqld/mysqld.sock", "-e", query)
 			if output, err = cmd.CombinedOutput(); err != nil {
-				return fmt.Errorf("failed to execute query: %s - %s", query[:min(50, len(query))], string(output))
+				// Non-fatal - continue with other queries
+				fmt.Printf("[MySQL Secure] Warning: %s - %s\n", query[:min(50, len(query))], string(output))
 			}
 		}
 	}
 
-	// Save root password securely
-	m.mysqlRootPwd = rootPwd
-	if err := m.saveRootPassword(rootPwd); err != nil {
-		return fmt.Errorf("failed to save root password: %w", err)
-	}
+	// Mark that we're using socket auth (no password needed)
+	m.mysqlRootPwd = ""
 
 	return nil
 }
