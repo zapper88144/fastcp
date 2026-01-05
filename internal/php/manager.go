@@ -479,21 +479,42 @@ func (m *Manager) startInstance(version string) error {
 		return err
 	}
 
-	// Set ownership of log directory to fastcp user
+	// Create socket directory with proper permissions for fastcp user
+	socketDir := "/var/run/fastcp"
+	if err := os.MkdirAll(socketDir, 0755); err != nil {
+		return err
+	}
+
+	// Set ownership of directories to fastcp user
 	if runtime.GOOS == "linux" {
 		if uid, gid, err := GetPHPUserCredentials(); err == nil {
 			os.Chown(logDir, int(uid), int(gid))
 			os.Chown(configPath, int(uid), int(gid))
+			os.Chown(socketDir, int(uid), int(gid))
 		}
 	}
 
 	// Start FrankenPHP process
 	cmd := exec.Command(instance.Config.BinaryPath, "run", "--config", configPath)
-	cmd.Stdout = nil
-	cmd.Stderr = nil
+	
+	// Log output to file for debugging
+	logFile := filepath.Join(logDir, "frankenphp.log")
+	if f, err := os.OpenFile(logFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		cmd.Stdout = f
+		cmd.Stderr = f
+		// Set ownership so fastcp user can write
+		if runtime.GOOS == "linux" {
+			if uid, gid, err := GetPHPUserCredentials(); err == nil {
+				os.Chown(logFile, int(uid), int(gid))
+			}
+		}
+	}
 
-	// Run as fastcp user on Linux for security
-	if runtime.GOOS == "linux" {
+	// Run as fastcp user on Linux for security (if enabled)
+	// Note: Requires `setcap 'cap_net_bind_service=+ep' /usr/local/bin/frankenphp`
+	runAsFastCPUser := os.Getenv("FASTCP_PHP_USER") != "root"
+	
+	if runtime.GOOS == "linux" && runAsFastCPUser {
 		if uid, gid, err := GetPHPUserCredentials(); err == nil {
 			cmd.SysProcAttr = &syscall.SysProcAttr{
 				Setpgid: true,
@@ -502,6 +523,7 @@ func (m *Manager) startInstance(version string) error {
 					Gid: gid,
 				},
 			}
+			fmt.Printf("[FastCP] Starting PHP %s as user 'fastcp' (uid=%d)\n", version, uid)
 		} else {
 			// Fallback: just setpgid if user not found
 			fmt.Printf("[Warning] fastcp user not found, running PHP as current user: %v\n", err)
@@ -510,6 +532,9 @@ func (m *Manager) startInstance(version string) error {
 			}
 		}
 	} else {
+		if !runAsFastCPUser {
+			fmt.Printf("[FastCP] Starting PHP %s as root (FASTCP_PHP_USER=root)\n", version)
+		}
 		cmd.SysProcAttr = &syscall.SysProcAttr{
 			Setpgid: true,
 		}

@@ -180,10 +180,14 @@ func (g *Generator) GenerateMainProxy(sites []models.Site, phpVersions []models.
 			continue
 		}
 
-		port, ok := versionPorts[site.PHPVersion]
+		// Check if this PHP version exists
+		_, ok := versionPorts[site.PHPVersion]
 		if !ok {
 			continue
 		}
+
+		// Get Unix socket path for this PHP version
+		socketPath := GetPHPSocketPath(site.PHPVersion)
 
 		// Domain(s) for this site
 		domains := []string{site.Domain}
@@ -202,8 +206,8 @@ func (g *Generator) GenerateMainProxy(sites []models.Site, phpVersions []models.
 		buf.WriteString(strings.Join(domains, ", "))
 		buf.WriteString(" {\n")
 
-		// Reverse proxy to PHP instance with error handling
-		buf.WriteString(fmt.Sprintf("\treverse_proxy localhost:%d {\n", port))
+		// Reverse proxy to PHP instance via Unix socket with error handling
+		buf.WriteString(fmt.Sprintf("\treverse_proxy unix/%s {\n", socketPath))
 		buf.WriteString("\t\t@error status 502 503 504\n")
 		buf.WriteString("\t\thandle_response @error {\n")
 		buf.WriteString("\t\t\theader Content-Type text/html\n")
@@ -375,7 +379,13 @@ func (g *Generator) GenerateMainProxy(sites []models.Site, phpVersions []models.
 	return buf.String(), nil
 }
 
+// GetPHPSocketPath returns the Unix socket path for a PHP version
+func GetPHPSocketPath(version string) string {
+	return fmt.Sprintf("/var/run/fastcp/php-%s.sock", version)
+}
+
 // GeneratePHPInstance generates a Caddyfile for a specific PHP version instance
+// Uses Unix socket instead of TCP port for better security and no port binding needed
 func (g *Generator) GeneratePHPInstance(version string, port, adminPort int, sites []models.Site) (string, error) {
 	var buf bytes.Buffer
 	cfg := config.Get()
@@ -389,13 +399,14 @@ func (g *Generator) GeneratePHPInstance(version string, port, adminPort int, sit
 	}
 
 	logPath := filepath.Join(cfg.LogDir, fmt.Sprintf("php-%s.log", version))
+	socketPath := GetPHPSocketPath(version)
 
-	// Global options
+	// Global options - using Unix socket instead of port
 	buf.WriteString(fmt.Sprintf(`# FastCP PHP %s Instance Configuration
 # Auto-generated - Do not edit manually
 
 {
-	admin localhost:%d
+	admin unix//var/run/fastcp/php-%s-admin.sock
 	
 	frankenphp
 	
@@ -408,19 +419,21 @@ func (g *Generator) GeneratePHPInstance(version string, port, adminPort int, sit
 	}
 }
 
-`, version, adminPort, logPath))
+`, version, version, logPath))
 
 	// If no sites, create a minimal placeholder config
 	if len(versionSites) == 0 {
 		buf.WriteString(fmt.Sprintf("# No sites configured for PHP %s\n", version))
-		buf.WriteString(fmt.Sprintf(":%d {\n", port))
+		buf.WriteString(fmt.Sprintf("bind unix/%s\n", socketPath))
+		buf.WriteString("http:// {\n")
 		buf.WriteString("\trespond \"No sites configured\" 503\n")
 		buf.WriteString("}\n")
 		return buf.String(), nil
 	}
 
-	// Generate a single server block for all sites
-	buf.WriteString(fmt.Sprintf(":%d {\n", port))
+	// Generate a single server block for all sites, listening on Unix socket
+	buf.WriteString(fmt.Sprintf("bind unix/%s\n\n", socketPath))
+	buf.WriteString("http:// {\n")
 
 	for _, site := range versionSites {
 		domains := []string{site.Domain}
