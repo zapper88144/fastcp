@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"os/exec"
 	"os/user"
 	"strconv"
@@ -139,12 +140,21 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add to fastcp group
+	// Secure home directory - prevent other users from accessing
+	homeDir := fmt.Sprintf("/home/%s", req.Username)
+	_ = exec.Command("chmod", "750", homeDir).Run()
+
+	// Add to fastcp group (for FastCP panel access)
 	_ = exec.Command("groupadd", "-f", "fastcp").Run()
 	cmd = exec.Command("usermod", "-aG", "fastcp", req.Username)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		s.logger.Warn("failed to add user to fastcp group", "error", err, "output", string(output))
 	}
+
+	// Add to ssh group if it exists (some systems restrict SSH to specific groups)
+	_ = exec.Command("usermod", "-aG", "ssh", req.Username).Run()
+	// Also try sshusers group (used by some configurations)
+	_ = exec.Command("usermod", "-aG", "sshusers", req.Username).Run()
 
 	// Add to sudo group if admin
 	if req.IsAdmin {
@@ -152,6 +162,22 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		if output, err := cmd.CombinedOutput(); err != nil {
 			s.logger.Warn("failed to add user to sudo group", "error", err, "output", string(output))
 		}
+	}
+
+	// Create user's web directory with proper permissions
+	userWebDir := fmt.Sprintf("/var/www/%s", req.Username)
+	if err := os.MkdirAll(userWebDir, 0750); err != nil {
+		s.logger.Warn("failed to create user web directory", "error", err)
+	} else {
+		// Set ownership to the new user
+		u, _ := user.Lookup(req.Username)
+		if u != nil {
+			uid, _ := strconv.Atoi(u.Uid)
+			gid, _ := strconv.Atoi(u.Gid)
+			_ = os.Chown(userWebDir, uid, gid)
+		}
+		// Ensure other users can't access
+		_ = exec.Command("chmod", "750", userWebDir).Run()
 	}
 
 	// Set resource limits
@@ -231,20 +257,68 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 		s.logger.Warn("failed to apply system limits", "error", err)
 	}
 
-	// Enable/disable user
-	if !req.Enabled {
-		_ = exec.Command("usermod", "-L", username).Run() // Lock account
-	} else {
-		_ = exec.Command("usermod", "-U", username).Run() // Unlock account
+	// Enable/disable user and their sites
+	u, err := user.Lookup(username)
+	if err != nil {
+		s.error(w, http.StatusNotFound, "user not found")
+		return
+	}
+
+	// Get current enabled state
+	currentEnabled := true
+	checkCmd := exec.Command("passwd", "-S", username)
+	if output, err := checkCmd.Output(); err == nil {
+		fields := strings.Fields(string(output))
+		if len(fields) >= 2 && fields[1] == "L" {
+			currentEnabled = false
+		}
+	}
+
+	// Handle state change
+	if !req.Enabled && currentEnabled {
+		// Disabling user - lock account and suspend all their sites
+		_ = exec.Command("usermod", "-L", username).Run()
+		
+		// Suspend all user's sites
+		userSites := s.siteManager.List(u.Uid)
+		for _, site := range userSites {
+			if site.Status == "active" {
+				if err := s.siteManager.Suspend(site.ID); err != nil {
+					s.logger.Warn("failed to suspend site", "site", site.Domain, "error", err)
+				} else {
+					s.logger.Info("suspended site for disabled user", "site", site.Domain, "user", username)
+				}
+			}
+		}
+		// Reload PHP to apply suspension
+		s.phpManager.Reload()
+		
+	} else if req.Enabled && !currentEnabled {
+		// Enabling user - unlock account and unsuspend all their sites
+		_ = exec.Command("usermod", "-U", username).Run()
+		
+		// Unsuspend all user's sites
+		userSites := s.siteManager.List(u.Uid)
+		for _, site := range userSites {
+			if site.Status == "suspended" {
+				if err := s.siteManager.Unsuspend(site.ID); err != nil {
+					s.logger.Warn("failed to unsuspend site", "site", site.Domain, "error", err)
+				} else {
+					s.logger.Info("unsuspended site for enabled user", "site", site.Domain, "user", username)
+				}
+			}
+		}
+		// Reload PHP to apply unsuspension
+		s.phpManager.Reload()
 	}
 
 	s.logger.Info("user updated", "username", username, "by", claims.Username)
 
-	u, _ := s.getFastCPUser(username)
-	s.success(w, u)
+	fastcpUser, _ := s.getFastCPUser(username)
+	s.success(w, fastcpUser)
 }
 
-// deleteUser removes a Unix user
+// deleteUser removes a Unix user and all their data
 func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 	username := chi.URLParam(r, "username")
 	claims := middleware.GetClaims(r)
@@ -261,23 +335,64 @@ func (s *Server) deleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user has sites
-	sites := s.siteManager.List(username)
-	if len(sites) > 0 {
-		s.error(w, http.StatusBadRequest, fmt.Sprintf("user has %d sites, delete them first", len(sites)))
+	// Get user info before deletion
+	u, err := user.Lookup(username)
+	if err != nil {
+		s.error(w, http.StatusNotFound, "user not found")
 		return
 	}
 
-	// Delete user
-	cmd := exec.Command("userdel", "-r", username)
+	// Delete all user's sites first
+	userSites := s.siteManager.List(u.Uid)
+	for _, site := range userSites {
+		s.logger.Info("deleting site for user deletion", "site", site.Domain, "user", username)
+		if err := s.siteManager.Delete(site.ID); err != nil {
+			s.logger.Warn("failed to delete site", "site", site.Domain, "error", err)
+		}
+	}
+
+	// Reload PHP after site deletion
+	if len(userSites) > 0 {
+		s.phpManager.Reload()
+	}
+
+	// Kill all user's processes
+	s.logger.Info("killing user processes", "user", username)
+	_ = exec.Command("pkill", "-9", "-u", username).Run()
+	
+	// Wait a moment for processes to die
+	exec.Command("sleep", "1").Run()
+
+	// Remove user's cgroup
+	limitsManager := limits.NewManager(s.logger)
+	_ = limitsManager.RemoveLimits(username)
+
+	// Remove user limits from config
+	_ = s.siteManager.SetUserLimit(&models.UserLimits{Username: username, MaxSites: 0})
+
+	// Delete user (with home directory)
+	cmd := exec.Command("userdel", "-rf", username)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		s.logger.Error("failed to delete user", "error", err, "output", string(output))
-		s.error(w, http.StatusInternalServerError, "failed to delete user")
-		return
+		// Try without -r if it fails (home might already be deleted)
+		cmd2 := exec.Command("userdel", "-f", username)
+		if output2, err2 := cmd2.CombinedOutput(); err2 != nil {
+			s.logger.Error("failed to delete user", "error", err2, "output", string(output)+string(output2))
+			s.error(w, http.StatusInternalServerError, "failed to delete user: processes may still be running")
+			return
+		}
 	}
 
-	s.logger.Info("user deleted", "username", username, "by", claims.Username)
-	s.success(w, map[string]string{"message": "user deleted"})
+	// Clean up user's web directory
+	userWebDir := fmt.Sprintf("/var/www/%s", username)
+	if err := os.RemoveAll(userWebDir); err != nil {
+		s.logger.Warn("failed to remove user web directory", "path", userWebDir, "error", err)
+	}
+
+	s.logger.Info("user deleted", "username", username, "sites_deleted", len(userSites), "by", claims.Username)
+	s.success(w, map[string]interface{}{
+		"message":       "user deleted",
+		"sites_deleted": len(userSites),
+	})
 }
 
 // getFastCPUsers returns all users in the fastcp group
@@ -394,4 +509,103 @@ func (s *Server) isUserInGroup(username, groupName string) bool {
 	return strings.Contains(string(output), groupName)
 }
 
+// fixUserPermissions fixes SSH and directory permissions for all users
+func (s *Server) fixUserPermissions(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.GetClaims(r)
+
+	results := make(map[string]interface{})
+	fixed := 0
+	errors := 0
+
+	// Get all FastCP users
+	users, err := s.getFastCPUsers()
+	if err != nil {
+		s.error(w, http.StatusInternalServerError, "failed to get users")
+		return
+	}
+
+	for _, u := range users {
+		if u.Username == "root" {
+			continue
+		}
+
+		userResults := map[string]string{}
+
+		// Fix home directory permissions
+		homeDir := fmt.Sprintf("/home/%s", u.Username)
+		if err := exec.Command("chmod", "750", homeDir).Run(); err == nil {
+			userResults["home_chmod"] = "fixed"
+		} else {
+			userResults["home_chmod"] = "error"
+			errors++
+		}
+
+		// Fix ownership of home directory
+		if err := exec.Command("chown", fmt.Sprintf("%s:%s", u.Username, u.Username), homeDir).Run(); err == nil {
+			userResults["home_chown"] = "fixed"
+		} else {
+			userResults["home_chown"] = "error"
+			errors++
+		}
+
+		// Fix web directory
+		webDir := fmt.Sprintf("/var/www/%s", u.Username)
+		if _, err := os.Stat(webDir); err == nil {
+			if err := exec.Command("chmod", "750", webDir).Run(); err == nil {
+				userResults["web_chmod"] = "fixed"
+			}
+			if err := exec.Command("chown", "-R", fmt.Sprintf("%s:%s", u.Username, u.Username), webDir).Run(); err == nil {
+				userResults["web_chown"] = "fixed"
+			}
+			// Apply ACL
+			setUserDirACL(webDir, u.Username)
+			userResults["web_acl"] = "applied"
+		}
+
+		// Ensure user is in SSH groups
+		_ = exec.Command("usermod", "-aG", "ssh", u.Username).Run()
+		_ = exec.Command("usermod", "-aG", "sshusers", u.Username).Run()
+		userResults["ssh_groups"] = "checked"
+
+		results[u.Username] = userResults
+		fixed++
+	}
+
+	// Secure base /var/www directory
+	_ = exec.Command("chown", "root:root", "/var/www").Run()
+	_ = exec.Command("chmod", "751", "/var/www").Run()
+	results["var_www"] = map[string]string{
+		"owner":       "root:root",
+		"permissions": "751",
+	}
+
+	s.logger.Info("fixed user permissions", "users", fixed, "errors", errors, "by", claims.Username)
+
+	s.success(w, map[string]interface{}{
+		"message":     "permissions fixed",
+		"users_fixed": fixed,
+		"errors":      errors,
+		"details":     results,
+	})
+}
+
+// setUserDirACL applies ACL to a user directory
+func setUserDirACL(path, username string) {
+	cmds := [][]string{
+		{"setfacl", "-b", path},
+		{"setfacl", "-R", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		{"setfacl", "-R", "-m", "u:root:rwx", path},
+		{"setfacl", "-R", "-m", "g::---", path},
+		{"setfacl", "-R", "-m", "o::---", path},
+		{"setfacl", "-d", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		{"setfacl", "-d", "-m", "u:root:rwx", path},
+		{"setfacl", "-d", "-m", "g::---", path},
+		{"setfacl", "-d", "-m", "o::---", path},
+	}
+
+	for _, cmdArgs := range cmds {
+		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		_ = cmd.Run()
+	}
+}
 

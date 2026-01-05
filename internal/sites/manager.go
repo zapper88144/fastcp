@@ -704,16 +704,27 @@ func setACL(path, username string) error {
 		return nil
 	}
 
+	// First, set strict Unix permissions (no access for others)
+	_ = exec.Command("chmod", "750", path).Run()
+
 	// Remove all default ACLs and set strict permissions
 	// Only the owner and root can access
 	cmds := [][]string{
 		// Remove existing ACLs
 		{"setfacl", "-b", path},
-		// Set default ACL for new files/dirs
-		{"setfacl", "-d", "-m", fmt.Sprintf("u:%s:rwx", username), path},
-		{"setfacl", "-d", "-m", "u:root:rwx", path},
+		// Set owner access
+		{"setfacl", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		// Set root access
+		{"setfacl", "-m", "u:root:rwx", path},
+		// Remove group access
+		{"setfacl", "-m", "g::---", path},
 		// Remove other users' access
 		{"setfacl", "-m", "o::---", path},
+		// Set default ACL for new files/dirs (inherit)
+		{"setfacl", "-d", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		{"setfacl", "-d", "-m", "u:root:rwx", path},
+		{"setfacl", "-d", "-m", "g::---", path},
+		{"setfacl", "-d", "-m", "o::---", path},
 	}
 
 	for _, cmdArgs := range cmds {
@@ -721,6 +732,20 @@ func setACL(path, username string) error {
 		// Ignore errors - setfacl might not be installed
 		_ = cmd.Run()
 	}
+
+	return nil
+}
+
+// SecureBaseDirectory ensures /var/www has proper permissions
+func SecureBaseDirectory(sitesDir string) error {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+
+	// /var/www should be owned by root with 751 permissions
+	// This allows traversal but not listing
+	_ = exec.Command("chown", "root:root", sitesDir).Run()
+	_ = exec.Command("chmod", "751", sitesDir).Run()
 
 	return nil
 }

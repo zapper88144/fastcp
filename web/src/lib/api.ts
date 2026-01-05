@@ -204,6 +204,10 @@ class APIClient {
   async deleteUser(username: string): Promise<void> {
     await this.request(`/users/${username}`, { method: 'DELETE' })
   }
+
+  async fixUserPermissions(): Promise<{ message: string; users_fixed: number; errors: number }> {
+    return this.request('/users/fix-permissions', { method: 'POST' })
+  }
 }
 
 // User types

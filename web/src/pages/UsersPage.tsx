@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, User, Shield, Trash2, Edit, MoreVertical, Users, Cpu, HardDrive, Gauge, Eye } from 'lucide-react'
+import { Plus, User, Shield, Trash2, Edit, MoreVertical, Users, Cpu, HardDrive, Gauge, Eye, Wrench } from 'lucide-react'
 import { api, FastCPUser, CreateUserRequest } from '@/lib/api'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
@@ -139,6 +139,20 @@ export function UsersPage() {
     navigate('/')
   }
 
+  const handleFixPermissions = async () => {
+    if (!confirm('This will fix SSH access and directory permissions for all users. Continue?')) {
+      return
+    }
+
+    try {
+      const result = await api.fixUserPermissions()
+      alert(`Fixed permissions for ${result.users_fixed} users. Errors: ${result.errors}`)
+      fetchUsers()
+    } catch (err: any) {
+      alert(err.message || 'Failed to fix permissions')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -157,25 +171,35 @@ export function UsersPage() {
             Manage Unix users and their resource limits
           </p>
         </div>
-        <button
-          onClick={() => {
-            setShowCreateModal(true)
-            setError('')
-            setForm({
-              username: '',
-              password: '',
-              is_admin: false,
-              site_limit: 0,
-              ram_limit_mb: 0,
-              cpu_percent: 0,
-              max_processes: 0,
-            })
-          }}
-          className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
-        >
-          <Plus className="w-4 h-4" />
-          Create User
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleFixPermissions}
+            className="flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground rounded-lg transition-colors"
+            title="Fix SSH and directory permissions for all users"
+          >
+            <Wrench className="w-4 h-4" />
+            Fix Permissions
+          </button>
+          <button
+            onClick={() => {
+              setShowCreateModal(true)
+              setError('')
+              setForm({
+                username: '',
+                password: '',
+                is_admin: false,
+                site_limit: 0,
+                ram_limit_mb: 0,
+                cpu_percent: 0,
+                max_processes: 0,
+              })
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors"
+          >
+            <Plus className="w-4 h-4" />
+            Create User
+          </button>
+        </div>
       </div>
 
       {/* Users Grid */}

@@ -131,6 +131,7 @@ func (s *Server) setupRoutes() {
 				r.Route("/users", func(r chi.Router) {
 					r.Get("/", s.listUsers)
 					r.Post("/", s.createUser)
+					r.Post("/fix-permissions", s.fixUserPermissions)
 					r.Get("/{username}", s.getUser)
 					r.Put("/{username}", s.updateUser)
 					r.Delete("/{username}", s.deleteUser)

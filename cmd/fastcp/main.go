@@ -75,6 +75,9 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Secure the base sites directory
+	sites.SecureBaseDirectory(cfg.SitesDir)
+
 	// Initialize Caddy generator
 	// Use templates from config directory (same parent as config file)
 	configDir := filepath.Dir(config.DefaultConfigPath())
