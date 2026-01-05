@@ -8,8 +8,8 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/fastcp/fastcp/internal/config"
-	"github.com/fastcp/fastcp/internal/models"
+	"github.com/rehmatworks/fastcp/internal/config"
+	"github.com/rehmatworks/fastcp/internal/models"
 )
 
 // Generator generates Caddyfile configurations

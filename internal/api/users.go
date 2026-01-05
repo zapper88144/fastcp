@@ -12,9 +12,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/fastcp/fastcp/internal/limits"
-	"github.com/fastcp/fastcp/internal/middleware"
-	"github.com/fastcp/fastcp/internal/models"
+	"github.com/rehmatworks/fastcp/internal/jail"
+	"github.com/rehmatworks/fastcp/internal/limits"
+	"github.com/rehmatworks/fastcp/internal/middleware"
+	"github.com/rehmatworks/fastcp/internal/models"
 )
 
 // FastCPUser represents a FastCP user with limits and usage
@@ -25,6 +26,10 @@ type FastCPUser struct {
 	HomeDir      string `json:"home_dir"`
 	IsAdmin      bool   `json:"is_admin"`
 	Enabled      bool   `json:"enabled"`
+
+	// Jail/SSH settings
+	IsJailed     bool   `json:"is_jailed"`     // SFTP-only, chrooted
+	ShellAccess  bool   `json:"shell_access"`  // Can use SSH shell (not jailed)
 
 	// Limits
 	SiteLimit    int   `json:"site_limit"`     // 0 = unlimited
@@ -43,7 +48,8 @@ type FastCPUser struct {
 type CreateUserRequest struct {
 	Username     string `json:"username"`
 	Password     string `json:"password"`
-	IsAdmin      bool   `json:"is_admin"`     // Add to sudo group
+	IsAdmin      bool   `json:"is_admin"`      // Add to sudo group
+	ShellAccess  bool   `json:"shell_access"`  // Allow SSH shell (false = SFTP only, jailed)
 
 	// Resource limits
 	SiteLimit    int   `json:"site_limit"`    // 0 = unlimited
@@ -56,6 +62,7 @@ type CreateUserRequest struct {
 type UpdateUserRequest struct {
 	Password     string `json:"password,omitempty"`
 	Enabled      bool   `json:"enabled"`
+	ShellAccess  bool   `json:"shell_access"`  // Allow SSH shell (false = SFTP only, jailed)
 
 	// Resource limits
 	SiteLimit    int   `json:"site_limit"`
@@ -162,11 +169,28 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 		if output, err := cmd.CombinedOutput(); err != nil {
 			s.logger.Warn("failed to add user to sudo group", "error", err, "output", string(output))
 		}
+		// Admins are not jailed
+		jail.RemoveUserFromJail(req.Username)
+	} else if !req.ShellAccess {
+		// Non-admin users without shell access are jailed (SFTP only)
+		if err := jail.SetupUserJail(req.Username); err != nil {
+			s.logger.Warn("failed to setup user jail", "error", err)
+		}
+		s.logger.Info("user jailed (SFTP-only)", "username", req.Username)
 	}
 
 	// Create user's web directory with proper permissions
-	userWebDir := fmt.Sprintf("/var/www/%s", req.Username)
-	if err := os.MkdirAll(userWebDir, 0750); err != nil {
+	// For jailed users, this is in /home/username/www
+	// For non-jailed users, this is in /var/www/username
+	var userWebDir string
+	if !req.ShellAccess && !req.IsAdmin {
+		// Jailed user - www is inside home
+		userWebDir = fmt.Sprintf("/home/%s/www", req.Username)
+	} else {
+		userWebDir = fmt.Sprintf("/var/www/%s", req.Username)
+	}
+	
+	if err := os.MkdirAll(userWebDir, 0755); err != nil {
 		s.logger.Warn("failed to create user web directory", "error", err)
 	} else {
 		// Set ownership to the new user
@@ -176,8 +200,6 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 			gid, _ := strconv.Atoi(u.Gid)
 			_ = os.Chown(userWebDir, uid, gid)
 		}
-		// Ensure other users can't access
-		_ = exec.Command("chmod", "750", userWebDir).Run()
 	}
 
 	// Set resource limits
@@ -255,6 +277,24 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	limitsManager := limits.NewManager(s.logger)
 	if err := limitsManager.ApplyLimits(userLimits); err != nil {
 		s.logger.Warn("failed to apply system limits", "error", err)
+	}
+
+	// Handle shell access / jail changes
+	isCurrentlyJailed := jail.IsUserJailed(username)
+	isAdmin := s.isUserInGroup(username, "sudo") || s.isUserInGroup(username, "wheel")
+
+	if !isAdmin {
+		if req.ShellAccess && isCurrentlyJailed {
+			// Grant shell access - remove from jail
+			jail.RemoveUserFromJail(username)
+			s.logger.Info("user removed from jail (shell access granted)", "username", username)
+		} else if !req.ShellAccess && !isCurrentlyJailed {
+			// Revoke shell access - add to jail
+			if err := jail.SetupUserJail(username); err != nil {
+				s.logger.Warn("failed to setup user jail", "error", err)
+			}
+			s.logger.Info("user jailed (SFTP-only)", "username", username)
+		}
 	}
 
 	// Enable/disable user and their sites
@@ -471,6 +511,9 @@ func (s *Server) getFastCPUser(username string) (*FastCPUser, error) {
 	limitsManager := limits.NewManager(s.logger)
 	usage, _ := limitsManager.GetUsage(username)
 
+	// Check jail status
+	isJailed := jail.IsUserJailed(username)
+
 	fastcpUser := &FastCPUser{
 		Username:     username,
 		UID:          uid,
@@ -478,6 +521,10 @@ func (s *Server) getFastCPUser(username string) (*FastCPUser, error) {
 		HomeDir:      u.HomeDir,
 		IsAdmin:      isAdmin,
 		Enabled:      enabled,
+
+		// Jail status
+		IsJailed:     isJailed,
+		ShellAccess:  !isJailed || isAdmin,
 
 		// Limits
 		SiteLimit:    userLimits.MaxSites,

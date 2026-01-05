@@ -73,11 +73,11 @@ This will:
 
 ```bash
 # Linux x86_64 (Ubuntu, Debian, CentOS, etc.)
-curl -L https://github.com/fastcp/fastcp/releases/latest/download/fastcp-linux-x86_64 -o /usr/local/bin/fastcp
+curl -L https://github.com/rehmatworks/fastcp/releases/latest/download/fastcp-linux-x86_64 -o /usr/local/bin/fastcp
 chmod +x /usr/local/bin/fastcp
 
 # Linux ARM64 (AWS Graviton, Oracle Ampere, etc.)
-curl -L https://github.com/fastcp/fastcp/releases/latest/download/fastcp-linux-aarch64 -o /usr/local/bin/fastcp
+curl -L https://github.com/rehmatworks/fastcp/releases/latest/download/fastcp-linux-aarch64 -o /usr/local/bin/fastcp
 chmod +x /usr/local/bin/fastcp
 ```
 
@@ -100,7 +100,7 @@ sudo systemctl enable fastcp
 # Requirements: Go 1.23+, Node.js 20+
 
 # Clone the repository
-git clone https://github.com/fastcp/fastcp.git
+git clone https://github.com/rehmatworks/fastcp.git
 cd fastcp
 
 # Install dependencies

@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/fastcp/fastcp/internal/models"
+	"github.com/rehmatworks/fastcp/internal/models"
 )
 
 var (

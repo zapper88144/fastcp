@@ -218,6 +218,8 @@ export interface FastCPUser {
   home_dir: string
   is_admin: boolean
   enabled: boolean
+  is_jailed: boolean
+  shell_access: boolean
   site_limit: number
   ram_limit_mb: number
   cpu_percent: number
@@ -232,6 +234,7 @@ export interface CreateUserRequest {
   username: string
   password: string
   is_admin: boolean
+  shell_access: boolean
   site_limit: number
   ram_limit_mb: number
   cpu_percent: number
@@ -241,6 +244,7 @@ export interface CreateUserRequest {
 export interface UpdateUserRequest {
   password?: string
   enabled?: boolean
+  shell_access?: boolean
   site_limit?: number
   ram_limit_mb?: number
   cpu_percent?: number

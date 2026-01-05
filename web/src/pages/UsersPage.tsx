@@ -20,6 +20,7 @@ export function UsersPage() {
     username: '',
     password: '',
     is_admin: false,
+    shell_access: false,
     site_limit: 0,
     ram_limit_mb: 0,
     cpu_percent: 0,
@@ -53,6 +54,7 @@ export function UsersPage() {
         username: '',
         password: '',
         is_admin: false,
+        shell_access: false,
         site_limit: 0,
         ram_limit_mb: 0,
         cpu_percent: 0,
@@ -76,6 +78,7 @@ export function UsersPage() {
       await api.updateUser(selectedUser.username, {
         password: form.password || undefined,
         enabled: true,
+        shell_access: form.shell_access,
         site_limit: form.site_limit,
         ram_limit_mb: form.ram_limit_mb,
         cpu_percent: form.cpu_percent,
@@ -125,6 +128,7 @@ export function UsersPage() {
       username: user.username,
       password: '',
       is_admin: user.is_admin,
+      shell_access: user.shell_access,
       site_limit: user.site_limit,
       ram_limit_mb: user.ram_limit_mb,
       cpu_percent: user.cpu_percent,
@@ -188,6 +192,7 @@ export function UsersPage() {
                 username: '',
                 password: '',
                 is_admin: false,
+                shell_access: false,
                 site_limit: 0,
                 ram_limit_mb: 0,
                 cpu_percent: 0,
@@ -222,7 +227,7 @@ export function UsersPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold">{user.username}</h3>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className={cn(
                       "text-xs px-2 py-0.5 rounded-full",
                       user.is_admin 
@@ -239,6 +244,11 @@ export function UsersPage() {
                     )}>
                       {user.enabled ? 'Active' : 'Disabled'}
                     </span>
+                    {user.is_jailed && (
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400">
+                        SFTP Only
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -384,17 +394,40 @@ export function UsersPage() {
                 <p className="text-xs text-muted-foreground mt-1">Minimum 8 characters</p>
               </div>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="is_admin"
-                  checked={form.is_admin}
-                  onChange={(e) => setForm({ ...form, is_admin: e.target.checked })}
-                  className="w-4 h-4 rounded border-border bg-secondary text-emerald-500 focus:ring-emerald-500"
-                />
-                <label htmlFor="is_admin" className="text-sm">
-                  Grant admin privileges (sudo access)
-                </label>
+              <div className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="is_admin"
+                    checked={form.is_admin}
+                    onChange={(e) => setForm({ ...form, is_admin: e.target.checked, shell_access: e.target.checked || form.shell_access })}
+                    className="w-4 h-4 rounded border-border bg-secondary text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <label htmlFor="is_admin" className="text-sm">
+                    Grant admin privileges (sudo access)
+                  </label>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    id="shell_access"
+                    checked={form.shell_access || form.is_admin}
+                    disabled={form.is_admin}
+                    onChange={(e) => setForm({ ...form, shell_access: e.target.checked })}
+                    className="w-4 h-4 rounded border-border bg-secondary text-emerald-500 focus:ring-emerald-500 disabled:opacity-50"
+                  />
+                  <div>
+                    <label htmlFor="shell_access" className="text-sm">
+                      Allow SSH shell access
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {form.shell_access || form.is_admin 
+                        ? "User can SSH with full shell access" 
+                        : "SFTP only - user is jailed to their home directory"}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="border-t border-border pt-4">
@@ -494,6 +527,28 @@ export function UsersPage() {
                   minLength={8}
                 />
               </div>
+
+              {!selectedUser?.is_admin && (
+                <div className="flex items-center gap-3 p-3 bg-secondary/50 rounded-lg">
+                  <input
+                    type="checkbox"
+                    id="edit_shell_access"
+                    checked={form.shell_access}
+                    onChange={(e) => setForm({ ...form, shell_access: e.target.checked })}
+                    className="w-4 h-4 rounded border-border bg-secondary text-emerald-500 focus:ring-emerald-500"
+                  />
+                  <div>
+                    <label htmlFor="edit_shell_access" className="text-sm font-medium">
+                      Allow SSH shell access
+                    </label>
+                    <p className="text-xs text-muted-foreground">
+                      {form.shell_access 
+                        ? "User can SSH with full shell access" 
+                        : "SFTP only - user is jailed to their home directory"}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               <div className="border-t border-border pt-4">
                 <h3 className="font-medium mb-3">Resource Limits</h3>

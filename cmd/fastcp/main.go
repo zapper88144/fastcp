@@ -12,11 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fastcp/fastcp/internal/api"
-	"github.com/fastcp/fastcp/internal/caddy"
-	"github.com/fastcp/fastcp/internal/config"
-	"github.com/fastcp/fastcp/internal/php"
-	"github.com/fastcp/fastcp/internal/sites"
+	"github.com/rehmatworks/fastcp/internal/api"
+	"github.com/rehmatworks/fastcp/internal/caddy"
+	"github.com/rehmatworks/fastcp/internal/config"
+	"github.com/rehmatworks/fastcp/internal/jail"
+	"github.com/rehmatworks/fastcp/internal/php"
+	"github.com/rehmatworks/fastcp/internal/sites"
 )
 
 var (
@@ -77,6 +78,18 @@ func main() {
 
 	// Secure the base sites directory
 	sites.SecureBaseDirectory(cfg.SitesDir)
+
+	// Setup SSH jail for SFTP-only users
+	if !config.IsDevMode() {
+		if err := jail.SetupJailGroup(); err != nil {
+			logger.Warn("Failed to setup jail group", "error", err)
+		}
+		if err := jail.SetupSSHConfig(); err != nil {
+			logger.Warn("Failed to setup SSH jail config", "error", err)
+		} else {
+			logger.Info("SSH jail configuration verified")
+		}
+	}
 
 	// Initialize Caddy generator
 	// Use templates from config directory (same parent as config file)

@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/fastcp/fastcp/internal/config"
-	"github.com/fastcp/fastcp/internal/downloader"
-	"github.com/fastcp/fastcp/internal/middleware"
+	"github.com/rehmatworks/fastcp/internal/config"
+	"github.com/rehmatworks/fastcp/internal/downloader"
+	"github.com/rehmatworks/fastcp/internal/middleware"
 )
 
 // Download state tracking

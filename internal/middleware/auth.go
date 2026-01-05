@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/fastcp/fastcp/internal/auth"
+	"github.com/rehmatworks/fastcp/internal/auth"
 )
 
 type contextKey string

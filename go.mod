@@ -1,4 +1,4 @@
-module github.com/fastcp/fastcp
+module github.com/rehmatworks/fastcp
 
 go 1.23
 

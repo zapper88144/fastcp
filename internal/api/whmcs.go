@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/fastcp/fastcp/internal/models"
+	"github.com/rehmatworks/fastcp/internal/models"
 )
 
 // whmcsProvision handles WHMCS provisioning requests

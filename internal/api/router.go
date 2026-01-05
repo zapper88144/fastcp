@@ -10,11 +10,11 @@ import (
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 
-	"github.com/fastcp/fastcp/internal/caddy"
-	"github.com/fastcp/fastcp/internal/middleware"
-	"github.com/fastcp/fastcp/internal/php"
-	"github.com/fastcp/fastcp/internal/sites"
-	"github.com/fastcp/fastcp/internal/static"
+	"github.com/rehmatworks/fastcp/internal/caddy"
+	"github.com/rehmatworks/fastcp/internal/middleware"
+	"github.com/rehmatworks/fastcp/internal/php"
+	"github.com/rehmatworks/fastcp/internal/sites"
+	"github.com/rehmatworks/fastcp/internal/static"
 )
 
 // Server holds all API handlers and dependencies

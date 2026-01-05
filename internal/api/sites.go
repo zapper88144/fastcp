@@ -9,9 +9,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/fastcp/fastcp/internal/middleware"
-	"github.com/fastcp/fastcp/internal/models"
-	"github.com/fastcp/fastcp/internal/sites"
+	"github.com/rehmatworks/fastcp/internal/middleware"
+	"github.com/rehmatworks/fastcp/internal/models"
+	"github.com/rehmatworks/fastcp/internal/sites"
 )
 
 // CreateSiteRequest represents a request to create a site

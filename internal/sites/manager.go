@@ -15,8 +15,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/fastcp/fastcp/internal/config"
-	"github.com/fastcp/fastcp/internal/models"
+	"github.com/rehmatworks/fastcp/internal/config"
+	"github.com/rehmatworks/fastcp/internal/jail"
+	"github.com/rehmatworks/fastcp/internal/models"
 )
 
 var (
@@ -396,18 +397,28 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
 	username := getUsernameFromID(site.UserID)
 	uid, gid := getUIDGID(site.UserID)
 
-	// Create user's base directory first (e.g., /var/www/username/)
-	if username != "" && username != "admin" {
-		userBaseDir := filepath.Join(cfg.SitesDir, username)
-		if err := os.MkdirAll(userBaseDir, 0750); err != nil {
+	// For jailed users, the www directory is inside their home
+	// For non-jailed users, it's in /var/www/username
+	var userBaseDir string
+	if username != "" && username != "admin" && runtime.GOOS == "linux" {
+		isJailed := jail.IsUserJailed(username)
+		if isJailed {
+			// Jailed user - www is in home directory
+			userBaseDir = filepath.Join("/home", username, "www")
+			// For jailed users, the RootPath should be updated
+			site.RootPath = filepath.Join(userBaseDir, site.Domain)
+		} else {
+			// Non-jailed user - www is in /var/www
+			userBaseDir = filepath.Join(cfg.SitesDir, username)
+		}
+		
+		if err := os.MkdirAll(userBaseDir, 0755); err != nil {
 			return err
 		}
 		// Set ownership on user base directory
-		if runtime.GOOS == "linux" {
-			setOwnership(userBaseDir, uid, gid)
-			// Set ACL to prevent other users from accessing
-			setACL(userBaseDir, username)
-		}
+		setOwnership(userBaseDir, uid, gid)
+		// Set ACL to prevent other users from accessing
+		setACL(userBaseDir, username)
 	}
 
 	dirs := []string{
@@ -417,7 +428,7 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0750); err != nil {
+		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
 		// Set ownership for site directories

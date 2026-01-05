@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/fastcp/fastcp/internal/auth"
-	"github.com/fastcp/fastcp/internal/middleware"
+	"github.com/rehmatworks/fastcp/internal/auth"
+	"github.com/rehmatworks/fastcp/internal/middleware"
 )
 
 // LoginRequest represents a login request

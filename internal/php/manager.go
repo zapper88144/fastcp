@@ -15,10 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/fastcp/fastcp/internal/caddy"
-	"github.com/fastcp/fastcp/internal/config"
-	"github.com/fastcp/fastcp/internal/downloader"
-	"github.com/fastcp/fastcp/internal/models"
+	"github.com/rehmatworks/fastcp/internal/caddy"
+	"github.com/rehmatworks/fastcp/internal/config"
+	"github.com/rehmatworks/fastcp/internal/downloader"
+	"github.com/rehmatworks/fastcp/internal/models"
 )
 
 // Manager manages PHP FrankenPHP instances and the main proxy

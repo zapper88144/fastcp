@@ -9,10 +9,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"github.com/fastcp/fastcp/internal/auth"
-	"github.com/fastcp/fastcp/internal/config"
-	"github.com/fastcp/fastcp/internal/middleware"
-	"github.com/fastcp/fastcp/internal/models"
+	"github.com/rehmatworks/fastcp/internal/auth"
+	"github.com/rehmatworks/fastcp/internal/config"
+	"github.com/rehmatworks/fastcp/internal/middleware"
+	"github.com/rehmatworks/fastcp/internal/models"
 )
 
 var startTime = time.Now()
