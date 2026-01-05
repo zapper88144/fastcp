@@ -768,14 +768,14 @@ func setACL(path, username string) error {
 	_ = exec.Command("chmod", "-R", "750", path).Run()
 
 	// Remove all default ACLs and set strict permissions recursively
-	// Owner has full access, fastcp user has read+execute for PHP, others have none
+	// Owner has full access, fastcp user has full access for PHP/WordPress, others have none
 	cmds := [][]string{
 		// Remove existing ACLs recursively
 		{"setfacl", "-R", "-b", path},
 		// Set owner access recursively
 		{"setfacl", "-R", "-m", fmt.Sprintf("u:%s:rwx", username), path},
-		// Set fastcp (PHP) user read+execute access recursively
-		{"setfacl", "-R", "-m", "u:fastcp:rx", path},
+		// Set fastcp (PHP) user full access recursively (needed for WordPress plugin/theme management)
+		{"setfacl", "-R", "-m", "u:fastcp:rwx", path},
 		// Set root access recursively
 		{"setfacl", "-R", "-m", "u:root:rwx", path},
 		// Remove group access recursively
@@ -784,7 +784,7 @@ func setACL(path, username string) error {
 		{"setfacl", "-R", "-m", "o::---", path},
 		// Set default ACL for new files/dirs (inherit) - only on directories
 		{"setfacl", "-d", "-m", fmt.Sprintf("u:%s:rwx", username), path},
-		{"setfacl", "-d", "-m", "u:fastcp:rx", path},
+		{"setfacl", "-d", "-m", "u:fastcp:rwx", path},
 		{"setfacl", "-d", "-m", "u:root:rwx", path},
 		{"setfacl", "-d", "-m", "g::---", path},
 		{"setfacl", "-d", "-m", "o::---", path},
