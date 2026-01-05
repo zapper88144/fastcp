@@ -92,7 +92,7 @@ func (m *Manager) save() error {
 	return os.WriteFile(m.dataFile, data, 0644)
 }
 
-// IsMySQLInstalled checks if MySQL/MariaDB is installed
+// IsMySQLInstalled checks if MySQL/MariaDB SERVER is installed
 func (m *Manager) IsMySQLInstalled() bool {
 	if runtime.GOOS != "linux" {
 		return false
@@ -101,6 +101,16 @@ func (m *Manager) IsMySQLInstalled() bool {
 	// Check for mysql client
 	if _, err := exec.LookPath("mysql"); err != nil {
 		return false
+	}
+
+	// Check if mysql-server package is actually installed (not just the client)
+	cmd := exec.Command("dpkg", "-l", "mysql-server")
+	if err := cmd.Run(); err != nil {
+		// Try mariadb-server
+		cmd = exec.Command("dpkg", "-l", "mariadb-server")
+		if err := cmd.Run(); err != nil {
+			return false
+		}
 	}
 
 	return true
@@ -123,33 +133,52 @@ func (m *Manager) InstallMySQL() error {
 		return errors.New("MySQL installation only supported on Linux")
 	}
 
-	// Update package list
-	cmd := exec.Command("apt-get", "update")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to update packages: %s", string(output))
+	log := func(msg string) {
+		fmt.Printf("[MySQL Install] %s\n", msg)
 	}
+
+	log("Starting MySQL installation...")
+
+	// Update package list
+	log("Running apt-get update...")
+	cmd := exec.Command("apt-get", "update")
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to update packages: %w", err)
+	}
+	log("Package list updated")
 
 	// Install MySQL server (non-interactive)
+	log("Installing mysql-server package (this may take a few minutes)...")
 	cmd = exec.Command("apt-get", "install", "-y", "mysql-server")
 	cmd.Env = append(os.Environ(), "DEBIAN_FRONTEND=noninteractive")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to install MySQL: %s", string(output))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to install MySQL: %w", err)
 	}
+	log("MySQL package installed")
 
 	// Start MySQL
+	log("Starting MySQL service...")
 	cmd = exec.Command("systemctl", "start", "mysql")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to start MySQL: %s", string(output))
+		return fmt.Errorf("failed to start MySQL: %s - %s", err.Error(), string(output))
 	}
+	log("MySQL service started")
 
 	// Enable MySQL to start on boot
+	log("Enabling MySQL on boot...")
 	cmd = exec.Command("systemctl", "enable", "mysql")
 	_ = cmd.Run()
 
 	// Secure MySQL installation
+	log("Securing MySQL installation...")
 	if err := m.secureMySQLInstallation(); err != nil {
 		return fmt.Errorf("failed to secure MySQL: %w", err)
 	}
+	log("MySQL installation complete!")
 
 	return nil
 }
