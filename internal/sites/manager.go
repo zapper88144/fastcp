@@ -463,30 +463,6 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
             letter-spacing: 0.05em;
             margin-top: 0.25rem;
         }
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            background: rgba(16, 185, 129, 0.1);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-            color: #10b981;
-            padding: 0.5rem 1rem;
-            border-radius: 999px;
-            font-size: 0.85rem;
-            font-weight: 500;
-        }
-        .badge::before {
-            content: '';
-            width: 8px;
-            height: 8px;
-            background: #10b981;
-            border-radius: 50%%;
-            animation: pulse 2s infinite;
-        }
-        @keyframes pulse {
-            0%%, 100%% { opacity: 1; }
-            50%% { opacity: 0.5; }
-        }
         .footer {
             margin-top: 2rem;
             color: #475569;
@@ -520,8 +496,6 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
                 </div>
             </div>
         </div>
-        
-        <span class="badge">Powered by FrankenPHP</span>
         
         <p class="footer">
             Managed by <a href="https://fastcp.org" target="_blank">FastCP</a> • 
