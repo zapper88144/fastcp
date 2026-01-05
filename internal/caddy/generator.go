@@ -32,17 +32,35 @@ func (g *Generator) GenerateMainProxy(sites []models.Site, phpVersions []models.
 	cfg := config.Get()
 
 	logPath := filepath.Join(cfg.LogDir, "caddy-proxy.log")
+	isDevMode := config.IsDevMode()
 
 	// Global options
-	buf.WriteString(fmt.Sprintf(`# FastCP Main Proxy Configuration
+	buf.WriteString(`# FastCP Main Proxy Configuration
 # Auto-generated - Do not edit manually
 
 {
 	admin localhost:2019
-	
-	# Disable automatic HTTPS for local development
+`)
+
+	if isDevMode {
+		// Disable automatic HTTPS for local development
+		buf.WriteString(`	
+	# Development mode - disable automatic HTTPS
 	auto_https off
-	
+`)
+	} else {
+		// Production - enable automatic HTTPS with Let's Encrypt
+		email := cfg.AdminEmail
+		if email == "" {
+			email = "admin@localhost"
+		}
+		buf.WriteString(fmt.Sprintf(`	
+	# Production mode - automatic HTTPS via Let's Encrypt
+	email %s
+`, email))
+	}
+
+	buf.WriteString(fmt.Sprintf(`	
 	# HTTP port configuration
 	http_port %d
 	https_port %d
@@ -82,11 +100,15 @@ func (g *Generator) GenerateMainProxy(sites []models.Site, phpVersions []models.
 		domains = append(domains, site.Aliases...)
 
 		buf.WriteString(fmt.Sprintf("# Site: %s (PHP %s)\n", site.Name, site.PHPVersion))
-		
-		// Use http:// prefix to disable automatic HTTPS
-		for i, d := range domains {
-			domains[i] = "http://" + d
+
+		if isDevMode {
+			// Development: Use http:// prefix to disable automatic HTTPS
+			for i, d := range domains {
+				domains[i] = "http://" + d
+			}
 		}
+		// Production: Just use domain names, Caddy will auto-provision SSL
+
 		buf.WriteString(strings.Join(domains, ", "))
 		buf.WriteString(" {\n")
 

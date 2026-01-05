@@ -64,6 +64,7 @@ type PHPVersionConfig struct {
 type Config struct {
 	AdminUser     string             `json:"admin_user"`
 	AdminPassword string             `json:"admin_password"`
+	AdminEmail    string             `json:"admin_email"` // Used for Let's Encrypt SSL
 	JWTSecret     string             `json:"jwt_secret"`
 	DataDir       string             `json:"data_dir"`
 	SitesDir      string             `json:"sites_dir"`
