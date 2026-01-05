@@ -34,25 +34,13 @@ func (m *Manager) ApplyLimits(limits *models.UserLimits) error {
 		return nil
 	}
 
-	var errors []string
-
 	// Apply cgroup limits (CPU, RAM, processes)
 	if err := m.applyCgroupLimits(limits); err != nil {
-		errors = append(errors, fmt.Sprintf("cgroup: %v", err))
-	}
-
-	// Apply disk quota
-	if err := m.applyDiskQuota(limits); err != nil {
-		errors = append(errors, fmt.Sprintf("quota: %v", err))
-	}
-
-	if len(errors) > 0 {
-		return fmt.Errorf("failed to apply some limits: %s", strings.Join(errors, "; "))
+		return fmt.Errorf("failed to apply cgroup limits: %w", err)
 	}
 
 	m.logger.Info("applied resource limits",
 		"user", limits.Username,
-		"disk_mb", limits.MaxDiskMB,
 		"ram_mb", limits.MaxRAMMB,
 		"cpu_percent", limits.MaxCPUPercent,
 		"processes", limits.MaxProcesses,
@@ -116,55 +104,6 @@ func (m *Manager) applyCgroupLimits(limits *models.UserLimits) error {
 	return nil
 }
 
-// applyDiskQuota sets disk quota for user
-func (m *Manager) applyDiskQuota(limits *models.UserLimits) error {
-	if limits.MaxDiskMB == 0 {
-		return nil
-	}
-
-	// Check if quota is available
-	if _, err := exec.LookPath("setquota"); err != nil {
-		m.logger.Warn("setquota not available, disk quotas disabled")
-		return nil
-	}
-
-	// Get user's primary group
-	u, err := m.lookupUser(limits.Username)
-	if err != nil {
-		return fmt.Errorf("user not found: %w", err)
-	}
-
-	// Set quota on /var/www (or wherever sites are stored)
-	// Format: setquota -u username soft_block hard_block soft_inode hard_inode filesystem
-	// Block size is typically 1KB
-	softLimit := limits.MaxDiskMB * 1024        // 90% of hard limit
-	hardLimit := limits.MaxDiskMB * 1024
-	softInodes := int64(100000)
-	hardInodes := int64(150000)
-
-	// Find the filesystem for /var/www
-	filesystem, err := m.getFilesystem("/var/www")
-	if err != nil {
-		m.logger.Warn("could not determine filesystem for /var/www", "error", err)
-		return nil
-	}
-
-	cmd := exec.Command("setquota", "-u", u.Username,
-		strconv.FormatInt(softLimit, 10),
-		strconv.FormatInt(hardLimit, 10),
-		strconv.FormatInt(softInodes, 10),
-		strconv.FormatInt(hardInodes, 10),
-		filesystem,
-	)
-
-	if output, err := cmd.CombinedOutput(); err != nil {
-		m.logger.Warn("failed to set disk quota", "error", err, "output", string(output))
-		// Don't return error - quotas might not be enabled on filesystem
-		return nil
-	}
-
-	return nil
-}
 
 // GetUsage returns current resource usage for a user
 func (m *Manager) GetUsage(username string) (*ResourceUsage, error) {
@@ -294,50 +233,11 @@ func (m *Manager) lookupUser(username string) (*userInfo, error) {
 	}, nil
 }
 
-func (m *Manager) getFilesystem(path string) (string, error) {
-	cmd := exec.Command("df", "-P", path)
-	output, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
-
-	lines := strings.Split(string(output), "\n")
-	if len(lines) < 2 {
-		return "", fmt.Errorf("unexpected df output")
-	}
-
-	fields := strings.Fields(lines[1])
-	if len(fields) < 1 {
-		return "", fmt.Errorf("unexpected df output")
-	}
-
-	return fields[0], nil
-}
-
 func (m *Manager) getDiskUsage(username string) (int64, error) {
-	// Check quota usage first
-	cmd := exec.Command("quota", "-u", username)
-	output, err := cmd.Output()
-	if err == nil {
-		// Parse quota output
-		lines := strings.Split(string(output), "\n")
-		for _, line := range lines {
-			if strings.Contains(line, "/") {
-				fields := strings.Fields(line)
-				if len(fields) >= 2 {
-					// Used blocks (in KB)
-					if used, err := strconv.ParseInt(fields[1], 10, 64); err == nil {
-						return used / 1024, nil // Convert to MB
-					}
-				}
-			}
-		}
-	}
-
-	// Fallback to du
+	// Use du to calculate disk usage
 	userDir := filepath.Join("/var/www", username)
-	cmd = exec.Command("du", "-sm", userDir)
-	output, err = cmd.Output()
+	cmd := exec.Command("du", "-sm", userDir)
+	output, err := cmd.Output()
 	if err != nil {
 		return 0, err
 	}

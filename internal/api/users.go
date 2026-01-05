@@ -18,39 +18,37 @@ import (
 
 // FastCPUser represents a FastCP user with limits and usage
 type FastCPUser struct {
-	Username      string `json:"username"`
-	UID           int    `json:"uid"`
-	GID           int    `json:"gid"`
-	HomeDir       string `json:"home_dir"`
-	IsAdmin       bool   `json:"is_admin"`
-	Enabled       bool   `json:"enabled"`
+	Username     string `json:"username"`
+	UID          int    `json:"uid"`
+	GID          int    `json:"gid"`
+	HomeDir      string `json:"home_dir"`
+	IsAdmin      bool   `json:"is_admin"`
+	Enabled      bool   `json:"enabled"`
 
 	// Limits
-	SiteLimit     int   `json:"site_limit"`      // 0 = unlimited
-	DiskLimitMB   int64 `json:"disk_limit_mb"`   // 0 = unlimited
-	RAMLimitMB    int64 `json:"ram_limit_mb"`    // 0 = unlimited
-	CPUPercent    int   `json:"cpu_percent"`     // 0 = unlimited (100 = 1 core)
-	MaxProcesses  int   `json:"max_processes"`   // 0 = unlimited
+	SiteLimit    int   `json:"site_limit"`     // 0 = unlimited
+	RAMLimitMB   int64 `json:"ram_limit_mb"`   // 0 = unlimited
+	CPUPercent   int   `json:"cpu_percent"`    // 0 = unlimited (100 = 1 core)
+	MaxProcesses int   `json:"max_processes"`  // 0 = unlimited
 
 	// Usage
-	SiteCount     int   `json:"site_count"`
-	DiskUsedMB    int64 `json:"disk_used_mb"`
-	RAMUsedMB     int64 `json:"ram_used_mb"`
-	ProcessCount  int   `json:"process_count"`
+	SiteCount    int   `json:"site_count"`
+	DiskUsedMB   int64 `json:"disk_used_mb"`
+	RAMUsedMB    int64 `json:"ram_used_mb"`
+	ProcessCount int   `json:"process_count"`
 }
 
 // CreateUserRequest represents a request to create a user
 type CreateUserRequest struct {
 	Username     string `json:"username"`
 	Password     string `json:"password"`
-	IsAdmin      bool   `json:"is_admin"`      // Add to sudo group
+	IsAdmin      bool   `json:"is_admin"`     // Add to sudo group
 
 	// Resource limits
-	SiteLimit    int   `json:"site_limit"`     // 0 = unlimited
-	DiskLimitMB  int64 `json:"disk_limit_mb"`  // 0 = unlimited
-	RAMLimitMB   int64 `json:"ram_limit_mb"`   // 0 = unlimited
-	CPUPercent   int   `json:"cpu_percent"`    // 0 = unlimited
-	MaxProcesses int   `json:"max_processes"`  // 0 = unlimited
+	SiteLimit    int   `json:"site_limit"`    // 0 = unlimited
+	RAMLimitMB   int64 `json:"ram_limit_mb"`  // 0 = unlimited
+	CPUPercent   int   `json:"cpu_percent"`   // 0 = unlimited
+	MaxProcesses int   `json:"max_processes"` // 0 = unlimited
 }
 
 // UpdateUserRequest represents a request to update a user
@@ -60,7 +58,6 @@ type UpdateUserRequest struct {
 
 	// Resource limits
 	SiteLimit    int   `json:"site_limit"`
-	DiskLimitMB  int64 `json:"disk_limit_mb"`
 	RAMLimitMB   int64 `json:"ram_limit_mb"`
 	CPUPercent   int   `json:"cpu_percent"`
 	MaxProcesses int   `json:"max_processes"`
@@ -161,7 +158,6 @@ func (s *Server) createUser(w http.ResponseWriter, r *http.Request) {
 	userLimits := &models.UserLimits{
 		Username:      req.Username,
 		MaxSites:      req.SiteLimit,
-		MaxDiskMB:     req.DiskLimitMB,
 		MaxRAMMB:      req.RAMLimitMB,
 		MaxCPUPercent: req.CPUPercent,
 		MaxProcesses:  req.MaxProcesses,
@@ -220,7 +216,6 @@ func (s *Server) updateUser(w http.ResponseWriter, r *http.Request) {
 	userLimits := &models.UserLimits{
 		Username:      username,
 		MaxSites:      req.SiteLimit,
-		MaxDiskMB:     req.DiskLimitMB,
 		MaxRAMMB:      req.RAMLimitMB,
 		MaxCPUPercent: req.CPUPercent,
 		MaxProcesses:  req.MaxProcesses,
@@ -371,7 +366,6 @@ func (s *Server) getFastCPUser(username string) (*FastCPUser, error) {
 
 		// Limits
 		SiteLimit:    userLimits.MaxSites,
-		DiskLimitMB:  userLimits.MaxDiskMB,
 		RAMLimitMB:   userLimits.MaxRAMMB,
 		CPUPercent:   userLimits.MaxCPUPercent,
 		MaxProcesses: userLimits.MaxProcesses,

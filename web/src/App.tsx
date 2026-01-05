@@ -7,6 +7,7 @@ import { SitesPage } from '@/pages/SitesPage'
 import { SiteDetailPage } from '@/pages/SiteDetailPage'
 import { CreateSitePage } from '@/pages/CreateSitePage'
 import { PHPPage } from '@/pages/PHPPage'
+import { UsersPage } from '@/pages/UsersPage'
 import { SettingsPage } from '@/pages/SettingsPage'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -30,6 +31,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
+function AdminRoute({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth()
+
+  if (user?.role !== 'admin') {
+    return <Navigate to="/" replace />
+  }
+
+  return <>{children}</>
+}
+
 function App() {
   return (
     <Routes>
@@ -45,6 +56,7 @@ function App() {
                 <Route path="/sites/new" element={<CreateSitePage />} />
                 <Route path="/sites/:id" element={<SiteDetailPage />} />
                 <Route path="/php" element={<PHPPage />} />
+                <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
                 <Route path="/settings" element={<SettingsPage />} />
               </Routes>
             </Layout>

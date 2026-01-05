@@ -162,6 +162,70 @@ class APIClient {
   async reloadAll(): Promise<void> {
     await this.request('/reload', { method: 'POST' })
   }
+
+  // Users (Admin only)
+  async getUsers(): Promise<{ users: FastCPUser[]; total: number }> {
+    return this.request('/users')
+  }
+
+  async getUser(username: string): Promise<FastCPUser> {
+    return this.request(`/users/${username}`)
+  }
+
+  async createUser(user: CreateUserRequest): Promise<FastCPUser> {
+    return this.request('/users', {
+      method: 'POST',
+      body: JSON.stringify(user),
+    })
+  }
+
+  async updateUser(username: string, data: UpdateUserRequest): Promise<FastCPUser> {
+    return this.request(`/users/${username}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteUser(username: string): Promise<void> {
+    await this.request(`/users/${username}`, { method: 'DELETE' })
+  }
+}
+
+// User types
+export interface FastCPUser {
+  username: string
+  uid: number
+  gid: number
+  home_dir: string
+  is_admin: boolean
+  enabled: boolean
+  site_limit: number
+  ram_limit_mb: number
+  cpu_percent: number
+  max_processes: number
+  site_count: number
+  disk_used_mb: number
+  ram_used_mb: number
+  process_count: number
+}
+
+export interface CreateUserRequest {
+  username: string
+  password: string
+  is_admin: boolean
+  site_limit: number
+  ram_limit_mb: number
+  cpu_percent: number
+  max_processes: number
+}
+
+export interface UpdateUserRequest {
+  password?: string
+  enabled?: boolean
+  site_limit?: number
+  ram_limit_mb?: number
+  cpu_percent?: number
+  max_processes?: number
 }
 
 export const api = new APIClient()
