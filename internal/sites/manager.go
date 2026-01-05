@@ -20,52 +20,67 @@ import (
 )
 
 var (
-	ErrSiteNotFound    = errors.New("site not found")
-	ErrDomainExists    = errors.New("domain already exists")
+	ErrSiteNotFound      = errors.New("site not found")
+	ErrDomainExists      = errors.New("domain already exists")
 	ErrInvalidPHPVersion = errors.New("invalid PHP version")
+	ErrSiteLimitReached  = errors.New("site limit reached")
 )
 
 // Manager manages website configurations
 type Manager struct {
-	sites    map[string]*models.Site
-	domains  map[string]string // domain -> site ID
-	mu       sync.RWMutex
-	dataPath string
+	sites      map[string]*models.Site
+	domains    map[string]string                 // domain -> site ID
+	userLimits map[string]*models.UserLimits     // username -> limits
+	mu         sync.RWMutex
+	dataPath   string
 }
 
 // NewManager creates a new site manager
 func NewManager(dataPath string) *Manager {
 	return &Manager{
-		sites:    make(map[string]*models.Site),
-		domains:  make(map[string]string),
-		dataPath: dataPath,
+		sites:      make(map[string]*models.Site),
+		domains:    make(map[string]string),
+		userLimits: make(map[string]*models.UserLimits),
+		dataPath:   dataPath,
 	}
 }
 
-// Load loads sites from storage
+// Load loads sites and user limits from storage
 func (m *Manager) Load() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// Load sites
 	sitesFile := filepath.Join(m.dataPath, "sites.json")
 	data, err := os.ReadFile(sitesFile)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return nil // No sites yet
+		if !os.IsNotExist(err) {
+			return err
 		}
-		return err
+	} else {
+		var sites []*models.Site
+		if err := json.Unmarshal(data, &sites); err != nil {
+			return err
+		}
+
+		for _, site := range sites {
+			m.sites[site.ID] = site
+			m.domains[site.Domain] = site.ID
+			for _, alias := range site.Aliases {
+				m.domains[alias] = site.ID
+			}
+		}
 	}
 
-	var sites []*models.Site
-	if err := json.Unmarshal(data, &sites); err != nil {
-		return err
-	}
-
-	for _, site := range sites {
-		m.sites[site.ID] = site
-		m.domains[site.Domain] = site.ID
-		for _, alias := range site.Aliases {
-			m.domains[alias] = site.ID
+	// Load user limits
+	limitsFile := filepath.Join(m.dataPath, "user_limits.json")
+	limitsData, err := os.ReadFile(limitsFile)
+	if err == nil {
+		var limits []*models.UserLimits
+		if err := json.Unmarshal(limitsData, &limits); err == nil {
+			for _, limit := range limits {
+				m.userLimits[limit.Username] = limit
+			}
 		}
 	}
 
@@ -106,6 +121,17 @@ func (m *Manager) Create(site *models.Site) (*models.Site, error) {
 	for _, alias := range site.Aliases {
 		if _, exists := m.domains[alias]; exists {
 			return nil, fmt.Errorf("alias %s already exists", alias)
+		}
+	}
+
+	// Check site limit for user
+	if site.UserID != "" && site.UserID != "admin" {
+		username := getUsernameFromID(site.UserID)
+		if limit, ok := m.userLimits[username]; ok && limit.MaxSites > 0 {
+			currentCount := m.countUserSitesUnlocked(site.UserID)
+			if currentCount >= limit.MaxSites {
+				return nil, ErrSiteLimitReached
+			}
 		}
 	}
 
@@ -362,9 +388,27 @@ func (m *Manager) Unsuspend(id string) error {
 	return m.saveUnlocked()
 }
 
-// createSiteDirectories creates the directory structure for a site
+// createSiteDirectories creates the directory structure for a site with proper ownership
 func (m *Manager) createSiteDirectories(site *models.Site) error {
 	cfg := config.Get()
+
+	// Get owner info
+	username := getUsernameFromID(site.UserID)
+	uid, gid := getUIDGID(site.UserID)
+
+	// Create user's base directory first (e.g., /var/www/username/)
+	if username != "" && username != "admin" {
+		userBaseDir := filepath.Join(cfg.SitesDir, username)
+		if err := os.MkdirAll(userBaseDir, 0750); err != nil {
+			return err
+		}
+		// Set ownership on user base directory
+		if runtime.GOOS == "linux" {
+			setOwnership(userBaseDir, uid, gid)
+			// Set ACL to prevent other users from accessing
+			setACL(userBaseDir, username)
+		}
+	}
 
 	dirs := []string{
 		site.RootPath,
@@ -373,8 +417,12 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
 	}
 
 	for _, dir := range dirs {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0750); err != nil {
 			return err
+		}
+		// Set ownership for site directories
+		if runtime.GOOS == "linux" && uid > 0 {
+			setOwnership(dir, uid, gid)
 		}
 	}
 
@@ -522,6 +570,21 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
 		if err := os.WriteFile(indexPath, []byte(content), 0644); err != nil {
 			return err
 		}
+		// Set ownership on the index file
+		if runtime.GOOS == "linux" {
+			uid, gid := getUIDGID(site.UserID)
+			if uid > 0 {
+				_ = os.Chown(indexPath, uid, gid)
+			}
+		}
+	}
+
+	// Set ownership recursively on the site root
+	if runtime.GOOS == "linux" {
+		uid, gid := getUIDGID(site.UserID)
+		if uid > 0 {
+			_ = setOwnershipRecursive(site.RootPath, uid, gid)
+		}
 	}
 
 	return nil
@@ -574,5 +637,141 @@ func (m *Manager) GetStats() (total, active int) {
 	}
 
 	return
+}
+
+// getUsernameFromID looks up the Unix username from a user ID
+func getUsernameFromID(userID string) string {
+	if userID == "" || userID == "admin" {
+		return ""
+	}
+
+	// Try to look up user by UID
+	u, err := user.LookupId(userID)
+	if err != nil {
+		// Maybe it's a username, not a UID
+		u, err = user.Lookup(userID)
+		if err != nil {
+			return ""
+		}
+	}
+	return u.Username
+}
+
+// getUIDGID returns the numeric UID and GID for a user
+func getUIDGID(userID string) (int, int) {
+	if userID == "" || userID == "admin" {
+		return 0, 0
+	}
+
+	u, err := user.LookupId(userID)
+	if err != nil {
+		u, err = user.Lookup(userID)
+		if err != nil {
+			return 0, 0
+		}
+	}
+
+	uid, _ := strconv.Atoi(u.Uid)
+	gid, _ := strconv.Atoi(u.Gid)
+	return uid, gid
+}
+
+// setOwnership sets the owner and group of a path
+func setOwnership(path string, uid, gid int) error {
+	if uid <= 0 {
+		return nil
+	}
+	return os.Chown(path, uid, gid)
+}
+
+// setOwnershipRecursive sets ownership recursively on a directory
+func setOwnershipRecursive(path string, uid, gid int) error {
+	if uid <= 0 {
+		return nil
+	}
+	
+	return filepath.Walk(path, func(name string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		return os.Chown(name, uid, gid)
+	})
+}
+
+// setACL sets POSIX ACLs to restrict access to a directory
+func setACL(path, username string) error {
+	if runtime.GOOS != "linux" {
+		return nil
+	}
+
+	// Remove all default ACLs and set strict permissions
+	// Only the owner and root can access
+	cmds := [][]string{
+		// Remove existing ACLs
+		{"setfacl", "-b", path},
+		// Set default ACL for new files/dirs
+		{"setfacl", "-d", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		{"setfacl", "-d", "-m", "u:root:rwx", path},
+		// Remove other users' access
+		{"setfacl", "-m", "o::---", path},
+	}
+
+	for _, cmdArgs := range cmds {
+		cmd := exec.Command(cmdArgs[0], cmdArgs[1:]...)
+		// Ignore errors - setfacl might not be installed
+		_ = cmd.Run()
+	}
+
+	return nil
+}
+
+// countUserSitesUnlocked counts sites for a user (caller must hold lock)
+func (m *Manager) countUserSitesUnlocked(userID string) int {
+	count := 0
+	for _, site := range m.sites {
+		if site.UserID == userID {
+			count++
+		}
+	}
+	return count
+}
+
+// GetUserLimit returns the site limit for a user
+func (m *Manager) GetUserLimit(username string) *models.UserLimits {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if limit, ok := m.userLimits[username]; ok {
+		return limit
+	}
+	return &models.UserLimits{Username: username, MaxSites: 0}
+}
+
+// SetUserLimit sets the site limit for a user
+func (m *Manager) SetUserLimit(limit *models.UserLimits) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.userLimits[limit.Username] = limit
+	return m.saveUserLimitsUnlocked()
+}
+
+// saveUserLimitsUnlocked saves user limits (caller must hold lock)
+func (m *Manager) saveUserLimitsUnlocked() error {
+	limits := make([]*models.UserLimits, 0, len(m.userLimits))
+	for _, limit := range m.userLimits {
+		limits = append(limits, limit)
+	}
+
+	data, err := json.MarshalIndent(limits, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	if err := os.MkdirAll(m.dataPath, 0755); err != nil {
+		return err
+	}
+
+	return os.WriteFile(filepath.Join(m.dataPath, "user_limits.json"), data, 0644)
 }
 

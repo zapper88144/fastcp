@@ -127,6 +127,15 @@ func (s *Server) setupRoutes() {
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.AdminOnlyMiddleware)
 
+				// User Management
+				r.Route("/users", func(r chi.Router) {
+					r.Get("/", s.listUsers)
+					r.Post("/", s.createUser)
+					r.Get("/{username}", s.getUser)
+					r.Put("/{username}", s.updateUser)
+					r.Delete("/{username}", s.deleteUser)
+				})
+
 				// API Keys
 				r.Route("/api-keys", func(r chi.Router) {
 					r.Get("/", s.listAPIKeys)

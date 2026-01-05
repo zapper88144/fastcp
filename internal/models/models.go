@@ -133,3 +133,14 @@ type AuditLog struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// UserLimits represents resource limits for a user
+type UserLimits struct {
+	Username     string `json:"username"`
+	MaxSites     int    `json:"max_sites"`      // 0 = unlimited
+	MaxDiskMB    int64  `json:"max_disk_mb"`    // 0 = unlimited, disk quota in MB
+	MaxRAMMB     int64  `json:"max_ram_mb"`     // 0 = unlimited, memory limit in MB
+	MaxCPUPercent int   `json:"max_cpu_percent"` // 0 = unlimited, CPU limit (100 = 1 core)
+	MaxBandwidth int64  `json:"max_bandwidth"`  // 0 = unlimited (bytes/month)
+	MaxProcesses int    `json:"max_processes"`  // 0 = unlimited, max concurrent processes
+}
+
