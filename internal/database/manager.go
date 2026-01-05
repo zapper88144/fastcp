@@ -160,6 +160,12 @@ func (m *Manager) InstallMySQL() error {
 	}
 	log("MySQL package installed")
 
+	// Configure MySQL for better performance
+	log("Configuring MySQL performance settings...")
+	if err := m.writePerformanceConfig(); err != nil {
+		log(fmt.Sprintf("Warning: failed to write performance config: %v", err))
+	}
+
 	// Start MySQL
 	log("Starting MySQL service...")
 	cmd = exec.Command("systemctl", "start", "mysql")
@@ -443,6 +449,41 @@ func (m *Manager) GetStatus() *models.DatabaseServerStatus {
 	}
 
 	return status
+}
+
+// writePerformanceConfig writes MySQL performance configuration
+func (m *Manager) writePerformanceConfig() error {
+	configContent := `# FastCP MySQL Performance Configuration
+[mysqld]
+# Disable performance schema for better performance on small servers
+performance_schema = OFF
+
+# Reduce memory usage
+innodb_buffer_pool_size = 128M
+innodb_log_buffer_size = 8M
+max_connections = 100
+
+# Improve query performance
+query_cache_type = 1
+query_cache_size = 16M
+query_cache_limit = 1M
+
+# Logging
+slow_query_log = 1
+slow_query_log_file = /var/log/mysql/slow.log
+long_query_time = 2
+`
+
+	configPath := "/etc/mysql/conf.d/fastcp.cnf"
+	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+		// Try alternative path
+		configPath = "/etc/mysql/mysql.conf.d/fastcp.cnf"
+		if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
+			return fmt.Errorf("failed to write config: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // execMySQL executes a MySQL query as root
