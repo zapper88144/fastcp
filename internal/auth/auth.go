@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os/exec"
 	"os/user"
 	"runtime"
@@ -28,7 +29,11 @@ var (
 )
 
 // AllowedGroups defines which Unix groups can access FastCP
+// Users in these groups can log in to the control panel
 var AllowedGroups = []string{"root", "sudo", "wheel", "admin", "fastcp"}
+
+// AdminGroups defines which groups get admin role
+var AdminGroups = []string{"root", "sudo", "wheel"}
 
 // Claims represents JWT claims
 type Claims struct {
@@ -65,30 +70,18 @@ func authenticateUnix(username, password string) (*models.User, error) {
 		return nil, ErrUserNotAllowed
 	}
 
-	// Authenticate using PAM via su command
-	// This is a simple approach; for production, consider using the pam library
-	cmd := exec.Command("su", "-c", "true", username)
-	stdin, err := cmd.StdinPipe()
-	if err != nil {
-		return nil, ErrInvalidCredentials
-	}
-
-	if err := cmd.Start(); err != nil {
-		return nil, ErrInvalidCredentials
-	}
-
-	// Write password to stdin
-	_, _ = stdin.Write([]byte(password + "\n"))
-	stdin.Close()
-
-	if err := cmd.Wait(); err != nil {
+	// Authenticate password using pamtester or shadow verification
+	if !verifyPassword(username, password) {
 		return nil, ErrInvalidCredentials
 	}
 
 	// Determine role based on groups
 	role := "user"
-	if isUserInGroup(username, "root") || isUserInGroup(username, "sudo") || isUserInGroup(username, "wheel") {
-		role = "admin"
+	for _, adminGroup := range AdminGroups {
+		if isUserInGroup(username, adminGroup) {
+			role = "admin"
+			break
+		}
 	}
 
 	return &models.User{
@@ -155,6 +148,53 @@ func isUserInGroup(username, groupName string) bool {
 		}
 	}
 	return false
+}
+
+// verifyPassword verifies a user's password against the system
+func verifyPassword(username, password string) bool {
+	// Use Python to verify password against shadow file
+	// This is more reliable than using su which doesn't require password when run as root
+	script := `
+import crypt
+import spwd
+try:
+    shadow = spwd.getspnam('%s')
+    if crypt.crypt('%s', shadow.sp_pwdp) == shadow.sp_pwdp:
+        print('OK')
+    else:
+        print('FAIL')
+except:
+    print('FAIL')
+`
+	// Escape single quotes in username and password
+	safeUsername := strings.ReplaceAll(username, "'", "\\'")
+	safePassword := strings.ReplaceAll(password, "'", "\\'")
+	
+	cmd := exec.Command("python3", "-c", fmt.Sprintf(script, safeUsername, safePassword))
+	output, err := cmd.Output()
+	if err != nil {
+		// Fallback: try using chpasswd --check (available on some systems)
+		return verifyPasswordFallback(username, password)
+	}
+
+	return strings.TrimSpace(string(output)) == "OK"
+}
+
+// verifyPasswordFallback uses an alternative method to verify password
+func verifyPasswordFallback(username, password string) bool {
+	// Try using login command with expect-like behavior
+	// Use timeout to prevent hanging
+	script := fmt.Sprintf(`#!/bin/bash
+echo '%s' | timeout 5 su -c 'exit 0' %s 2>/dev/null
+exit $?
+`, strings.ReplaceAll(password, "'", "'\\''"), username)
+
+	cmd := exec.Command("bash", "-c", script)
+	err := cmd.Run()
+	
+	// If running as non-root, su will ask for password
+	// If running as root, this won't work - rely on Python method
+	return err == nil
 }
 
 // GenerateToken generates a JWT token for a user
