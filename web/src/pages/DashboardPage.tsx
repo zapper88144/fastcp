@@ -11,10 +11,13 @@ import {
   Activity,
 } from 'lucide-react'
 import { api } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
 import { formatBytes, formatUptime, getStatusBgColor } from '@/lib/utils'
 import type { Stats, Site, PHPInstance } from '@/types'
 
 export function DashboardPage() {
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'admin'
   const [stats, setStats] = useState<Stats | null>(null)
   const [sites, setSites] = useState<Site[]>([])
   const [phpInstances, setPHPInstances] = useState<PHPInstance[]>([])
@@ -23,14 +26,21 @@ export function DashboardPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [statsData, sitesData, phpData] = await Promise.all([
+        // Only fetch PHP instances for admins
+        const fetchPromises: Promise<any>[] = [
           api.getStats(),
           api.getSites(),
-          api.getPHPInstances(),
-        ])
-        setStats(statsData)
-        setSites(sitesData.sites || [])
-        setPHPInstances(phpData.instances || [])
+        ]
+        if (isAdmin) {
+          fetchPromises.push(api.getPHPInstances())
+        }
+
+        const results = await Promise.all(fetchPromises)
+        setStats(results[0])
+        setSites(results[1].sites || [])
+        if (isAdmin && results[2]) {
+          setPHPInstances(results[2].instances || [])
+        }
       } catch (error) {
         console.error('Failed to fetch dashboard data:', error)
       } finally {
@@ -38,7 +48,7 @@ export function DashboardPage() {
       }
     }
     fetchData()
-  }, [])
+  }, [isAdmin])
 
   if (isLoading) {
     return (
@@ -48,7 +58,8 @@ export function DashboardPage() {
     )
   }
 
-  const statCards = [
+  // Different stats for admin vs regular users
+  const statCards = isAdmin ? [
     {
       name: 'Total Sites',
       value: stats?.total_sites || 0,
@@ -76,6 +87,21 @@ export function DashboardPage() {
       subtext: 'System running',
       icon: Clock,
       color: 'from-amber-500 to-amber-600',
+    },
+  ] : [
+    {
+      name: 'My Sites',
+      value: sites.length,
+      subtext: `${sites.filter(s => s.status === 'active').length} active`,
+      icon: Globe,
+      color: 'from-emerald-500 to-emerald-600',
+    },
+    {
+      name: 'Disk Usage',
+      value: formatBytes(stats?.disk_usage || 0),
+      subtext: 'Used by your sites',
+      icon: HardDrive,
+      color: 'from-blue-500 to-blue-600',
     },
   ]
 
@@ -119,11 +145,11 @@ export function DashboardPage() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className={`grid grid-cols-1 ${isAdmin ? 'lg:grid-cols-2' : ''} gap-6`}>
         {/* Recent Sites */}
         <div className="bg-card border border-border rounded-xl">
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <h2 className="font-semibold">Recent Sites</h2>
+            <h2 className="font-semibold">{isAdmin ? 'Recent Sites' : 'My Sites'}</h2>
             <Link
               to="/sites"
               className="text-sm text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
@@ -173,74 +199,76 @@ export function DashboardPage() {
           </div>
         </div>
 
-        {/* PHP Instances */}
-        <div className="bg-card border border-border rounded-xl">
-          <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <h2 className="font-semibold">PHP Instances</h2>
-            <Link
-              to="/php"
-              className="text-sm text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
-            >
-              Manage
-              <ArrowRight className="w-4 h-4" />
-            </Link>
-          </div>
-          <div className="divide-y divide-border">
-            {phpInstances.length === 0 ? (
-              <div className="px-5 py-8 text-center text-muted-foreground">
-                <Server className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                <p>No PHP instances configured</p>
-              </div>
-            ) : (
-              phpInstances.map((instance) => (
-                <div
-                  key={instance.version}
-                  className="flex items-center gap-4 px-5 py-3"
-                >
-                  <div
-                    className={`w-9 h-9 rounded-lg flex items-center justify-center border ${
-                      instance.status === 'running'
-                        ? 'bg-emerald-500/10 border-emerald-500/20'
-                        : 'bg-secondary border-border'
-                    }`}
-                  >
-                    <Server
-                      className={`w-4 h-4 ${
-                        instance.status === 'running'
-                          ? 'text-emerald-400'
-                          : 'text-muted-foreground'
-                      }`}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <p className="font-medium">PHP {instance.version}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {instance.site_count} sites • Port {instance.port}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {instance.status === 'running' && (
-                      <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
-                    )}
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full border ${getStatusBgColor(
-                        instance.status
-                      )}`}
-                    >
-                      {instance.status}
-                    </span>
-                  </div>
+        {/* PHP Instances - Admin only */}
+        {isAdmin && (
+          <div className="bg-card border border-border rounded-xl">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <h2 className="font-semibold">PHP Instances</h2>
+              <Link
+                to="/php"
+                className="text-sm text-emerald-400 hover:text-emerald-300 flex items-center gap-1"
+              >
+                Manage
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+            <div className="divide-y divide-border">
+              {phpInstances.length === 0 ? (
+                <div className="px-5 py-8 text-center text-muted-foreground">
+                  <Server className="w-10 h-10 mx-auto mb-3 opacity-50" />
+                  <p>No PHP instances configured</p>
                 </div>
-              ))
-            )}
+              ) : (
+                phpInstances.map((instance) => (
+                  <div
+                    key={instance.version}
+                    className="flex items-center gap-4 px-5 py-3"
+                  >
+                    <div
+                      className={`w-9 h-9 rounded-lg flex items-center justify-center border ${
+                        instance.status === 'running'
+                          ? 'bg-emerald-500/10 border-emerald-500/20'
+                          : 'bg-secondary border-border'
+                      }`}
+                    >
+                      <Server
+                        className={`w-4 h-4 ${
+                          instance.status === 'running'
+                            ? 'text-emerald-400'
+                            : 'text-muted-foreground'
+                        }`}
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <p className="font-medium">PHP {instance.version}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {instance.site_count} sites • Port {instance.port}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {instance.status === 'running' && (
+                        <Activity className="w-4 h-4 text-emerald-400 animate-pulse" />
+                      )}
+                      <span
+                        className={`text-xs px-2 py-1 rounded-full border ${getStatusBgColor(
+                          instance.status
+                        )}`}
+                      >
+                        {instance.status}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Quick Actions */}
       <div className="bg-card border border-border rounded-xl p-5">
         <h2 className="font-semibold mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className={`grid grid-cols-2 ${isAdmin ? 'sm:grid-cols-4' : 'sm:grid-cols-2'} gap-3`}>
           <Link
             to="/sites/new"
             className="flex flex-col items-center gap-2 p-4 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
@@ -249,26 +277,30 @@ export function DashboardPage() {
             <span className="text-sm">Add Site</span>
           </Link>
           <Link
-            to="/php"
+            to="/sites"
             className="flex flex-col items-center gap-2 p-4 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
           >
-            <Server className="w-5 h-5 text-blue-400" />
-            <span className="text-sm">PHP Manager</span>
+            <Globe className="w-5 h-5 text-blue-400" />
+            <span className="text-sm">My Sites</span>
           </Link>
-          <Link
-            to="/settings"
-            className="flex flex-col items-center gap-2 p-4 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
-          >
-            <HardDrive className="w-5 h-5 text-purple-400" />
-            <span className="text-sm">API Keys</span>
-          </Link>
-          <button
-            onClick={() => api.reloadAll()}
-            className="flex flex-col items-center gap-2 p-4 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
-          >
-            <Activity className="w-5 h-5 text-amber-400" />
-            <span className="text-sm">Reload All</span>
-          </button>
+          {isAdmin && (
+            <>
+              <Link
+                to="/php"
+                className="flex flex-col items-center gap-2 p-4 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+              >
+                <Server className="w-5 h-5 text-purple-400" />
+                <span className="text-sm">PHP Manager</span>
+              </Link>
+              <button
+                onClick={() => api.reloadAll()}
+                className="flex flex-col items-center gap-2 p-4 rounded-lg bg-secondary hover:bg-secondary/80 transition-colors"
+              >
+                <Activity className="w-5 h-5 text-amber-400" />
+                <span className="text-sm">Reload All</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

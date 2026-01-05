@@ -8,6 +8,7 @@ import {
   Menu,
   X,
   Users,
+  UserX,
 } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -16,20 +17,28 @@ import { useAuth } from '@/hooks/useAuth'
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Sites', href: '/sites', icon: Globe },
-  { name: 'PHP', href: '/php', icon: Server },
+  { name: 'PHP', href: '/php', icon: Server, adminOnly: true },
   { name: 'Users', href: '/users', icon: Users, adminOnly: true },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: 'Settings', href: '/settings', icon: Settings, adminOnly: true },
 ]
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { user, logout } = useAuth()
+  const { user, realUser, logout, isImpersonating, stopImpersonating } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  // When impersonating, use realUser for admin checks
+  const effectiveRole = isImpersonating ? realUser?.role : user?.role
 
   const handleLogout = () => {
     logout()
     navigate('/login')
+  }
+
+  const handleStopImpersonating = () => {
+    stopImpersonating()
+    navigate('/')
   }
 
   return (
@@ -70,7 +79,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           {/* Navigation */}
           <nav className="flex-1 px-3 py-4 space-y-1">
             {navigation
-              .filter((item) => !item.adminOnly || user?.role === 'admin')
+              .filter((item) => !item.adminOnly || effectiveRole === 'admin')
               .map((item) => {
                 const isActive = location.pathname === item.href || 
                   (item.href !== '/' && location.pathname.startsWith(item.href))
@@ -118,6 +127,27 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main content */}
       <div className="lg:pl-64">
+        {/* Impersonation banner */}
+        {isImpersonating && (
+          <div className="bg-amber-500/20 border-b border-amber-500/30 px-4 py-2">
+            <div className="flex items-center justify-between max-w-7xl mx-auto">
+              <div className="flex items-center gap-2 text-amber-200">
+                <UserX className="w-4 h-4" />
+                <span className="text-sm">
+                  Viewing as <strong>{user?.username}</strong>
+                  <span className="text-amber-300/70 ml-2">(logged in as {realUser?.username})</span>
+                </span>
+              </div>
+              <button
+                onClick={handleStopImpersonating}
+                className="text-xs px-3 py-1 bg-amber-500/30 hover:bg-amber-500/50 rounded-lg transition-colors text-amber-100"
+              >
+                Exit Impersonation
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top bar */}
         <header className="sticky top-0 z-30 bg-background/80 backdrop-blur-xl border-b border-border">
           <div className="flex items-center gap-4 px-4 py-3 lg:px-6">

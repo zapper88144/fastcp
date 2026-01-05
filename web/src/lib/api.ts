@@ -4,9 +4,11 @@ const API_BASE = '/api/v1'
 
 class APIClient {
   private token: string | null = null
+  private impersonating: string | null = null
 
   constructor() {
     this.token = localStorage.getItem('fastcp_token')
+    this.impersonating = sessionStorage.getItem('impersonating')
   }
 
   setToken(token: string | null) {
@@ -22,6 +24,14 @@ class APIClient {
     return this.token
   }
 
+  setImpersonating(username: string | null) {
+    this.impersonating = username
+  }
+
+  getImpersonating(): string | null {
+    return this.impersonating
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -33,6 +43,11 @@ class APIClient {
 
     if (this.token) {
       headers['Authorization'] = `Bearer ${this.token}`
+    }
+
+    // Add impersonation header if impersonating
+    if (this.impersonating) {
+      headers['X-Impersonate-User'] = this.impersonating
     }
 
     const response = await fetch(`${API_BASE}${endpoint}`, {

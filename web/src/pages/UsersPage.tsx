@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
-import { Plus, User, Shield, Trash2, Edit, MoreVertical, Users, Cpu, HardDrive, Gauge } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Plus, User, Shield, Trash2, Edit, MoreVertical, Users, Cpu, HardDrive, Gauge, Eye } from 'lucide-react'
 import { api, FastCPUser, CreateUserRequest } from '@/lib/api'
+import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
 
 export function UsersPage() {
+  const navigate = useNavigate()
+  const { impersonate, user: currentUser } = useAuth()
   const [users, setUsers] = useState<FastCPUser[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
@@ -130,6 +134,11 @@ export function UsersPage() {
     setError('')
   }
 
+  const handleImpersonate = (username: string) => {
+    impersonate(username)
+    navigate('/')
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -213,7 +222,15 @@ export function UsersPage() {
                 <button className="p-1.5 text-muted-foreground hover:text-foreground rounded-lg hover:bg-secondary">
                   <MoreVertical className="w-4 h-4" />
                 </button>
-                <div className="absolute right-0 top-8 bg-card border border-border rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[140px]">
+                <div className="absolute right-0 top-8 bg-card border border-border rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-10 min-w-[160px]">
+                  {user.username !== currentUser?.username && !user.is_admin && (
+                    <button
+                      onClick={() => handleImpersonate(user.username)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-secondary text-left text-amber-400"
+                    >
+                      <Eye className="w-4 h-4" /> View as User
+                    </button>
+                  )}
                   <button
                     onClick={() => openEditModal(user)}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-secondary text-left"
@@ -226,7 +243,7 @@ export function UsersPage() {
                   >
                     {user.enabled ? 'Disable' : 'Enable'}
                   </button>
-                  {user.username !== 'root' && (
+                  {user.username !== 'root' && user.username !== currentUser?.username && (
                     <button
                       onClick={() => handleDelete(user.username)}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm hover:bg-secondary text-red-400 text-left"

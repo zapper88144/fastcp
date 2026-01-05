@@ -11,8 +11,9 @@ import (
 type contextKey string
 
 const (
-	UserContextKey   contextKey = "user"
-	ClaimsContextKey contextKey = "claims"
+	UserContextKey         contextKey = "user"
+	ClaimsContextKey       contextKey = "claims"
+	ImpersonatingContextKey contextKey = "impersonating"
 )
 
 // AuthMiddleware validates JWT tokens and sets user context
@@ -45,8 +46,23 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Add claims to context
-		ctx := context.WithValue(r.Context(), ClaimsContextKey, claims)
+		ctx := r.Context()
+
+		// Handle impersonation - only admins can impersonate
+		impersonateUser := r.Header.Get("X-Impersonate-User")
+		if impersonateUser != "" && claims.Role == "admin" {
+			// Create modified claims for impersonated user
+			impersonatedClaims := &auth.Claims{
+				UserID:   impersonateUser,
+				Username: impersonateUser,
+				Role:     "user", // Impersonated users are always non-admin
+			}
+			ctx = context.WithValue(ctx, ClaimsContextKey, impersonatedClaims)
+			ctx = context.WithValue(ctx, ImpersonatingContextKey, claims) // Store real admin claims
+		} else {
+			ctx = context.WithValue(ctx, ClaimsContextKey, claims)
+		}
+
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -93,5 +109,21 @@ func AdminOnlyMiddleware(next http.Handler) http.Handler {
 func GetClaims(r *http.Request) *auth.Claims {
 	claims, _ := r.Context().Value(ClaimsContextKey).(*auth.Claims)
 	return claims
+}
+
+// GetRealClaims retrieves the real admin claims when impersonating
+func GetRealClaims(r *http.Request) *auth.Claims {
+	claims, ok := r.Context().Value(ImpersonatingContextKey).(*auth.Claims)
+	if ok {
+		return claims
+	}
+	// Not impersonating, return normal claims
+	return GetClaims(r)
+}
+
+// IsImpersonating returns true if the current request is impersonated
+func IsImpersonating(r *http.Request) bool {
+	_, ok := r.Context().Value(ImpersonatingContextKey).(*auth.Claims)
+	return ok
 }
 
