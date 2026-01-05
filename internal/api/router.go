@@ -14,6 +14,7 @@ import (
 	"github.com/fastcp/fastcp/internal/middleware"
 	"github.com/fastcp/fastcp/internal/php"
 	"github.com/fastcp/fastcp/internal/sites"
+	"github.com/fastcp/fastcp/internal/static"
 )
 
 // Server holds all API handlers and dependencies
@@ -144,7 +145,13 @@ func (s *Server) setupRoutes() {
 	})
 
 	// Serve frontend (SPA)
-	r.Get("/*", s.serveFrontend)
+	if static.HasEmbeddedFiles() {
+		// Serve embedded React app
+		r.Handle("/*", static.Handler())
+	} else {
+		// Fallback to built-in HTML when React app is not built
+		r.Get("/*", s.serveFrontend)
+	}
 
 	s.router = r
 }

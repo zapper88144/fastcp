@@ -10,7 +10,7 @@ export default defineConfig({
     },
   },
   build: {
-    outDir: '../static',
+    outDir: '../internal/static/dist',
     emptyOutDir: true,
   },
   server: {

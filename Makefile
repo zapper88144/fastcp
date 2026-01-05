@@ -48,7 +48,7 @@ run: build
 clean:
 	rm -rf bin/
 	rm -rf web/node_modules/
-	rm -rf static/
+	rm -rf internal/static/dist/*.js internal/static/dist/*.css internal/static/dist/*.html internal/static/dist/assets/
 
 # Format code
 fmt:
@@ -59,10 +59,19 @@ fmt:
 test:
 	go test -v ./...
 
+# Build for Linux (cross-compile from any OS)
+build-linux: build-frontend
+	@echo "Building for Linux x86_64..."
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o bin/$(BINARY_NAME)-linux-x86_64 ./cmd/fastcp
+	@echo "Building for Linux ARM64..."
+	GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build $(GO_BUILD_FLAGS) -o bin/$(BINARY_NAME)-linux-aarch64 ./cmd/fastcp
+	@echo "Linux builds complete!"
+
 # Create release
-release: clean build
-	@echo "Creating release archive..."
-	tar -czf fastcp-$(shell uname -s | tr '[:upper:]' '[:lower:]')-$(shell uname -m).tar.gz -C bin $(BINARY_NAME)
+release: clean build-linux
+	@echo "Creating release archives..."
+	cd bin && sha256sum $(BINARY_NAME)-* > checksums.txt
+	@echo "Release files ready in bin/"
 
 # Help
 help:
@@ -76,7 +85,8 @@ help:
 	@echo "  make run            Build and run production binary"
 	@echo "  make clean          Clean build artifacts"
 	@echo "  make test           Run tests"
-	@echo "  make release        Create release archive"
+	@echo "  make build-linux    Cross-compile for Linux (x86_64 + ARM64)"
+	@echo "  make release        Build and prepare release files"
 	@echo ""
 	@echo "Environment Variables:"
 	@echo "  FASTCP_DEV=1        Enable development mode (local directories)"
