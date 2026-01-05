@@ -26,12 +26,23 @@ var (
 	ErrMySQLNotRunning  = errors.New("MySQL is not running")
 )
 
+// InstallStatus represents the MySQL installation status
+type InstallStatus struct {
+	InProgress bool   `json:"in_progress"`
+	Success    bool   `json:"success"`
+	Error      string `json:"error,omitempty"`
+	Message    string `json:"message,omitempty"`
+	StartedAt  time.Time `json:"started_at,omitempty"`
+}
+
 // Manager handles database operations
 type Manager struct {
-	databases    map[string]*models.Database
-	mu           sync.RWMutex
-	dataFile     string
-	mysqlRootPwd string
+	databases     map[string]*models.Database
+	mu            sync.RWMutex
+	dataFile      string
+	mysqlRootPwd  string
+	installStatus *InstallStatus
+	installMu     sync.RWMutex
 }
 
 // NewManager creates a new database manager
@@ -253,6 +264,92 @@ func (m *Manager) AdoptMySQL() error {
 	log("FastCP will use socket authentication for database operations.")
 
 	return nil
+}
+
+// GetInstallStatus returns the current MySQL installation status
+func (m *Manager) GetInstallStatus() *InstallStatus {
+	m.installMu.RLock()
+	defer m.installMu.RUnlock()
+
+	if m.installStatus == nil {
+		return &InstallStatus{InProgress: false}
+	}
+	return m.installStatus
+}
+
+// IsInstalling returns true if MySQL installation is in progress
+func (m *Manager) IsInstalling() bool {
+	m.installMu.RLock()
+	defer m.installMu.RUnlock()
+	return m.installStatus != nil && m.installStatus.InProgress
+}
+
+// InstallMySQLAsync starts MySQL installation in the background
+func (m *Manager) InstallMySQLAsync() error {
+	m.installMu.Lock()
+	defer m.installMu.Unlock()
+
+	// Check if already installing
+	if m.installStatus != nil && m.installStatus.InProgress {
+		return errors.New("MySQL installation already in progress")
+	}
+
+	// Set initial status
+	m.installStatus = &InstallStatus{
+		InProgress: true,
+		Message:    "Starting MySQL installation...",
+		StartedAt:  time.Now(),
+	}
+
+	// Run installation in background
+	go func() {
+		var finalErr error
+
+		// Check if MySQL is already installed - if so, just adopt it
+		if m.IsMySQLInstalled() {
+			m.updateInstallStatus("Adopting existing MySQL installation...", false, nil)
+			finalErr = m.AdoptMySQL()
+		} else {
+			finalErr = m.InstallMySQL()
+		}
+
+		// Update final status
+		m.installMu.Lock()
+		if finalErr != nil {
+			m.installStatus = &InstallStatus{
+				InProgress: false,
+				Success:    false,
+				Error:      finalErr.Error(),
+				Message:    "MySQL installation failed",
+			}
+		} else {
+			m.installStatus = &InstallStatus{
+				InProgress: false,
+				Success:    true,
+				Message:    "MySQL installed successfully",
+			}
+		}
+		m.installMu.Unlock()
+	}()
+
+	return nil
+}
+
+// updateInstallStatus updates the installation status message
+func (m *Manager) updateInstallStatus(message string, inProgress bool, err error) {
+	m.installMu.Lock()
+	defer m.installMu.Unlock()
+
+	if m.installStatus == nil {
+		m.installStatus = &InstallStatus{}
+	}
+
+	m.installStatus.Message = message
+	m.installStatus.InProgress = inProgress
+	if err != nil {
+		m.installStatus.Error = err.Error()
+		m.installStatus.Success = false
+	}
 }
 
 // secureMySQLInstallation secures the MySQL installation

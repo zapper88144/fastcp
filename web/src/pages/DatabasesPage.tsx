@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import {
   Database,
   Plus,
@@ -10,7 +10,7 @@ import {
   Loader2,
   Key,
 } from 'lucide-react'
-import { api } from '@/lib/api'
+import { api, MySQLInstallStatus } from '@/lib/api'
 import { getStatusBgColor, cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
 
@@ -43,17 +43,52 @@ export function DatabasesPage() {
   const [creating, setCreating] = useState(false)
   const [resettingPassword, setResettingPassword] = useState(false)
   const [installing, setInstalling] = useState(false)
+  const [installStatus, setInstallStatus] = useState<MySQLInstallStatus | null>(null)
   const [error, setError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [newDatabase, setNewDatabase] = useState<DatabaseItem | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState<{ db: DatabaseItem; password: string } | null>(null)
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   const [form, setForm] = useState({
     name: '',
     username: '',
     password: '',
   })
+
+  // Poll for installation status
+  const pollInstallStatus = useCallback(async () => {
+    try {
+      const status = await api.getMySQLInstallStatus()
+      setInstallStatus(status)
+
+      if (!status.in_progress) {
+        // Installation finished, stop polling
+        if (pollIntervalRef.current) {
+          clearInterval(pollIntervalRef.current)
+          pollIntervalRef.current = null
+        }
+        setInstalling(false)
+
+        if (status.success) {
+          // Refresh data to show MySQL is installed
+          fetchData()
+        }
+      }
+    } catch (error) {
+      console.error('Failed to get install status:', error)
+    }
+  }, [])
+
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     fetchData()
@@ -108,16 +143,27 @@ export function DatabasesPage() {
   }
 
   async function handleInstall() {
-    if (!confirm('Install MySQL server? This will download and configure MySQL.')) return
+    if (!confirm('Install MySQL server? This will download and configure MySQL. This may take a few minutes.')) return
 
     setInstalling(true)
+    setInstallStatus({ in_progress: true, success: false, message: 'Starting installation...' })
+
     try {
-      await api.installMySQL()
-      fetchData()
+      const response = await api.installMySQL()
+
+      // If it's already installed (adopted), we're done
+      if (response.status === 'completed') {
+        setInstalling(false)
+        setInstallStatus({ in_progress: false, success: true, message: response.message })
+        fetchData()
+        return
+      }
+
+      // Otherwise, start polling for status
+      pollIntervalRef.current = setInterval(pollInstallStatus, 2000)
     } catch (error: any) {
-      alert('Failed to install MySQL: ' + (error.message || 'Unknown error'))
-    } finally {
       setInstalling(false)
+      setInstallStatus({ in_progress: false, success: false, error: error.message || 'Unknown error' })
     }
   }
 

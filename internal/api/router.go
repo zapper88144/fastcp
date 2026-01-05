@@ -130,6 +130,7 @@ func (s *Server) setupRoutes() {
 				r.Post("/", s.createDatabase)
 				r.Get("/status", s.getDatabaseStatus)
 				r.Post("/install", s.installMySQL)
+				r.Get("/install/status", s.getMySQLInstallStatus)
 				r.Get("/{id}", s.getDatabase)
 				r.Delete("/{id}", s.deleteDatabase)
 				r.Post("/{id}/reset-password", s.resetDatabasePassword)

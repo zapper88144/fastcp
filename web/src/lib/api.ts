@@ -240,8 +240,12 @@ class APIClient {
     return this.request('/databases/status')
   }
 
-  async installMySQL(): Promise<{ message: string }> {
+  async installMySQL(): Promise<{ message: string; status: string }> {
     return this.request('/databases/install', { method: 'POST' })
+  }
+
+  async getMySQLInstallStatus(): Promise<MySQLInstallStatus> {
+    return this.request('/databases/install/status')
   }
 }
 
@@ -270,6 +274,14 @@ export interface DatabaseStatus {
   running: boolean
   version?: string
   database_count: number
+}
+
+export interface MySQLInstallStatus {
+  in_progress: boolean
+  success: boolean
+  error?: string
+  message?: string
+  started_at?: string
 }
 
 // User types

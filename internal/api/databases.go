@@ -208,7 +208,7 @@ func (s *Server) getDatabaseStatus(w http.ResponseWriter, r *http.Request) {
 	s.success(w, status)
 }
 
-// installMySQL installs MySQL server or adopts an existing installation
+// installMySQL starts MySQL installation asynchronously
 func (s *Server) installMySQL(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetClaims(r)
 
@@ -217,11 +217,17 @@ func (s *Server) installMySQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if MySQL is already installed
-	if s.dbManager.IsMySQLInstalled() {
+	// Check if installation is already in progress
+	if s.dbManager.IsInstalling() {
+		s.error(w, http.StatusConflict, "MySQL installation already in progress")
+		return
+	}
+
+	// Check if MySQL is already installed and running
+	if s.dbManager.IsMySQLInstalled() && s.dbManager.IsMySQLRunning() {
 		s.logger.Info("MySQL already installed, attempting to adopt", "user", claims.Username)
 
-		// Try to adopt the existing installation
+		// Try to adopt the existing installation (this is quick, can be sync)
 		if err := s.dbManager.AdoptMySQL(); err != nil {
 			s.logger.Error("failed to adopt existing MySQL", "error", err)
 			s.error(w, http.StatusInternalServerError, "MySQL is installed but FastCP cannot connect to it. Please ensure MySQL is running and accessible: "+err.Error())
@@ -229,20 +235,32 @@ func (s *Server) installMySQL(w http.ResponseWriter, r *http.Request) {
 		}
 
 		s.logger.Info("MySQL adopted successfully", "user", claims.Username)
-		s.success(w, map[string]string{"message": "Existing MySQL installation configured successfully"})
+		s.success(w, map[string]interface{}{
+			"message": "Existing MySQL installation configured successfully",
+			"status":  "completed",
+		})
 		return
 	}
 
-	s.logger.Info("installing MySQL", "user", claims.Username)
+	// Start async installation
+	s.logger.Info("starting MySQL installation", "user", claims.Username)
 
-	if err := s.dbManager.InstallMySQL(); err != nil {
-		s.logger.Error("failed to install MySQL", "error", err)
-		s.error(w, http.StatusInternalServerError, "failed to install MySQL: "+err.Error())
+	if err := s.dbManager.InstallMySQLAsync(); err != nil {
+		s.logger.Error("failed to start MySQL installation", "error", err)
+		s.error(w, http.StatusInternalServerError, "failed to start MySQL installation: "+err.Error())
 		return
 	}
 
-	s.logger.Info("MySQL installed successfully", "user", claims.Username)
-	s.success(w, map[string]string{"message": "MySQL installed and secured successfully"})
+	s.json(w, http.StatusAccepted, map[string]interface{}{
+		"message": "MySQL installation started",
+		"status":  "installing",
+	})
+}
+
+// getMySQLInstallStatus returns the current MySQL installation status
+func (s *Server) getMySQLInstallStatus(w http.ResponseWriter, r *http.Request) {
+	status := s.dbManager.GetInstallStatus()
+	s.success(w, status)
 }
 
 // isValidDatabaseName checks if a name is valid for MySQL

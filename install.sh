@@ -121,6 +121,7 @@ detect_platform() {
 }
 
 # Prompt for configuration
+# Note: We read from /dev/tty to support curl | bash usage
 prompt_configuration() {
     echo ""
     echo -e "${CYAN}═══════════════════════════════════════════════════════════════${NC}"
@@ -132,7 +133,8 @@ prompt_configuration() {
     echo -e "${BLUE}SSL Certificate Email${NC}"
     echo "This email will be used for Let's Encrypt SSL certificate notifications."
     echo ""
-    read -p "Enter admin email [support@fastcp.org]: " input_email
+    printf "Enter admin email [support@fastcp.org]: "
+    read input_email < /dev/tty
     ADMIN_EMAIL="${input_email:-support@fastcp.org}"
     
     echo ""
@@ -141,7 +143,8 @@ prompt_configuration() {
     echo -e "${BLUE}Admin Panel Port${NC}"
     echo "Port for the FastCP admin panel (default: 8080)"
     echo ""
-    read -p "Enter API port [8080]: " input_port
+    printf "Enter API port [8080]: "
+    read input_port < /dev/tty
     API_PORT="${input_port:-8080}"
     
     echo ""
@@ -150,7 +153,8 @@ prompt_configuration() {
     echo "  Admin Port:  $API_PORT"
     echo ""
     
-    read -p "Continue with these settings? [Y/n]: " confirm
+    printf "Continue with these settings? [Y/n]: "
+    read confirm < /dev/tty
     if [[ "$confirm" =~ ^[Nn] ]]; then
         echo -e "${YELLOW}Installation cancelled.${NC}"
         exit 0
