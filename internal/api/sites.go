@@ -21,6 +21,7 @@ type CreateSiteRequest struct {
 	Aliases     []string          `json:"aliases,omitempty"`
 	PHPVersion  string            `json:"php_version"`
 	PublicPath  string            `json:"public_path,omitempty"`
+	AppType     string            `json:"app_type"` // blank, wordpress
 	WorkerMode  bool              `json:"worker_mode"`
 	WorkerFile  string            `json:"worker_file,omitempty"`
 	WorkerNum   int               `json:"worker_num,omitempty"`
@@ -77,6 +78,12 @@ func (s *Server) createSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Default app type to blank
+	appType := req.AppType
+	if appType == "" {
+		appType = "blank"
+	}
+
 	site := &models.Site{
 		UserID:      claims.UserID,
 		Name:        req.Name,
@@ -84,6 +91,7 @@ func (s *Server) createSite(w http.ResponseWriter, r *http.Request) {
 		Aliases:     req.Aliases,
 		PHPVersion:  req.PHPVersion,
 		PublicPath:  req.PublicPath,
+		AppType:     appType,
 		WorkerMode:  req.WorkerMode,
 		WorkerFile:  req.WorkerFile,
 		WorkerNum:   req.WorkerNum,
@@ -110,12 +118,27 @@ func (s *Server) createSite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If WordPress, install it
+	if appType == "wordpress" {
+		s.logger.Info("installing WordPress", "site", created.Domain)
+		dbInfo, err := s.siteManager.InstallWordPress(created, s.dbManager)
+		if err != nil {
+			s.logger.Error("failed to install WordPress", "error", err)
+			// Site was created but WordPress installation failed
+			// Don't fail the entire request, just log it
+		} else {
+			// Update site with database ID
+			created.DatabaseID = dbInfo.ID
+			s.siteManager.Update(created.ID, created)
+		}
+	}
+
 	// Reload PHP instances to apply changes
 	if err := s.phpManager.Reload(); err != nil {
 		s.logger.Warn("failed to reload PHP instances", "error", err)
 	}
 
-	s.logger.Info("site created", "id", created.ID, "domain", created.Domain, "user", claims.Username)
+	s.logger.Info("site created", "id", created.ID, "domain", created.Domain, "app", appType, "user", claims.Username)
 	s.json(w, http.StatusCreated, created)
 }
 

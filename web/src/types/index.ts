@@ -14,6 +14,8 @@ export interface Site {
   php_version: string
   root_path: string
   public_path: string
+  app_type: 'blank' | 'wordpress'
+  database_id?: string
   worker_mode: boolean
   worker_file: string
   worker_num: number

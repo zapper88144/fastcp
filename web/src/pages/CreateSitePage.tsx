@@ -1,8 +1,24 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { ArrowLeft, Loader2, Globe, Zap } from 'lucide-react'
+import { ArrowLeft, Loader2, Globe, Zap, FileCode, CircleDot } from 'lucide-react'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import type { PHPInstance } from '@/types'
+
+const APP_TYPES = [
+  {
+    id: 'blank',
+    name: 'Blank Site',
+    description: 'Empty PHP site with default landing page',
+    icon: FileCode,
+  },
+  {
+    id: 'wordpress',
+    name: 'WordPress',
+    description: 'Latest WordPress with auto-configured database',
+    icon: CircleDot,
+  },
+]
 
 export function CreateSitePage() {
   const navigate = useNavigate()
@@ -15,6 +31,7 @@ export function CreateSitePage() {
     domain: '',
     php_version: '8.4',
     public_path: 'public',
+    app_type: 'blank',
     worker_mode: false,
     worker_file: 'index.php',
     worker_num: 2,
@@ -45,7 +62,8 @@ export function CreateSitePage() {
         name: form.name || form.domain,
         domain: form.domain,
         php_version: form.php_version,
-        public_path: form.public_path,
+        public_path: form.app_type === 'wordpress' ? '' : form.public_path, // WordPress uses root
+        app_type: form.app_type as 'blank' | 'wordpress',
         worker_mode: form.worker_mode,
         worker_file: form.worker_mode ? form.worker_file : undefined,
         worker_num: form.worker_mode ? form.worker_num : undefined,
@@ -82,6 +100,61 @@ export function CreateSitePage() {
             {error}
           </div>
         )}
+
+        {/* App Type Selection */}
+        <div className="bg-card border border-border rounded-xl p-6 space-y-4">
+          <h2 className="font-semibold">Choose Application Type</h2>
+          <div className="grid grid-cols-2 gap-4">
+            {APP_TYPES.map((appType) => {
+              const Icon = appType.icon
+              const isSelected = form.app_type === appType.id
+              return (
+                <button
+                  key={appType.id}
+                  type="button"
+                  onClick={() => setForm({ ...form, app_type: appType.id })}
+                  className={cn(
+                    "relative p-4 rounded-xl border-2 text-left transition-all",
+                    isSelected
+                      ? "border-emerald-500 bg-emerald-500/10"
+                      : "border-border hover:border-muted-foreground/50 bg-secondary/50"
+                  )}
+                >
+                  <div className="flex items-start gap-3">
+                    <div className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center",
+                      isSelected ? "bg-emerald-500/20" : "bg-muted"
+                    )}>
+                      <Icon className={cn(
+                        "w-5 h-5",
+                        isSelected ? "text-emerald-400" : "text-muted-foreground"
+                      )} />
+                    </div>
+                    <div className="flex-1">
+                      <h3 className={cn(
+                        "font-medium",
+                        isSelected && "text-emerald-400"
+                      )}>
+                        {appType.name}
+                      </h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {appType.description}
+                      </p>
+                    </div>
+                  </div>
+                  {isSelected && (
+                    <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-emerald-500" />
+                  )}
+                </button>
+              )
+            })}
+          </div>
+          {form.app_type === 'wordpress' && (
+            <div className="bg-blue-500/10 border border-blue-500/20 text-blue-400 px-4 py-3 rounded-lg text-sm">
+              <strong>WordPress:</strong> A database will be automatically created and configured. You'll complete the WordPress installation in your browser after creation.
+            </div>
+          )}
+        </div>
 
         <div className="bg-card border border-border rounded-xl p-6 space-y-5">
           <div className="flex items-center gap-3 pb-4 border-b border-border">

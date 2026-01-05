@@ -24,6 +24,8 @@ type Site struct {
 	PHPVersion  string            `json:"php_version"`
 	RootPath    string            `json:"root_path"`
 	PublicPath  string            `json:"public_path"` // relative to root_path
+	AppType     string            `json:"app_type"`    // blank, wordpress
+	DatabaseID  string            `json:"database_id,omitempty"`
 	WorkerMode  bool              `json:"worker_mode"`
 	WorkerFile  string            `json:"worker_file,omitempty"`
 	WorkerNum   int               `json:"worker_num,omitempty"`
