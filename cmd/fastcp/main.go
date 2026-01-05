@@ -100,6 +100,11 @@ func main() {
 		cfg.DataDir+"/caddy",
 	)
 
+	// Ensure fastcp user exists for running PHP securely
+	if err := php.EnsurePHPUser(); err != nil {
+		logger.Warn("Failed to create fastcp user, PHP will run as current user", "error", err)
+	}
+
 	// Initialize PHP manager
 	phpManager := php.NewManager(caddyGen, siteManager.GetAll)
 	if err := phpManager.Initialize(); err != nil {

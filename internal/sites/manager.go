@@ -747,6 +747,7 @@ func setOwnershipRecursive(path string, uid, gid int) error {
 }
 
 // setACL sets POSIX ACLs to restrict access to a directory
+// Also grants read access to the fastcp user for PHP execution
 func setACL(path, username string) error {
 	if runtime.GOOS != "linux" {
 		return nil
@@ -756,12 +757,14 @@ func setACL(path, username string) error {
 	_ = exec.Command("chmod", "750", path).Run()
 
 	// Remove all default ACLs and set strict permissions
-	// Only the owner and root can access
+	// Owner has full access, fastcp user has read+execute for PHP, others have none
 	cmds := [][]string{
 		// Remove existing ACLs
 		{"setfacl", "-b", path},
 		// Set owner access
 		{"setfacl", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		// Set fastcp (PHP) user read+execute access
+		{"setfacl", "-m", "u:fastcp:rx", path},
 		// Set root access
 		{"setfacl", "-m", "u:root:rwx", path},
 		// Remove group access
@@ -770,6 +773,7 @@ func setACL(path, username string) error {
 		{"setfacl", "-m", "o::---", path},
 		// Set default ACL for new files/dirs (inherit)
 		{"setfacl", "-d", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		{"setfacl", "-d", "-m", "u:fastcp:rx", path},
 		{"setfacl", "-d", "-m", "u:root:rwx", path},
 		{"setfacl", "-d", "-m", "g::---", path},
 		{"setfacl", "-d", "-m", "o::---", path},

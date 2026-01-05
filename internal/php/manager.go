@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -19,6 +21,12 @@ import (
 	"github.com/rehmatworks/fastcp/internal/config"
 	"github.com/rehmatworks/fastcp/internal/downloader"
 	"github.com/rehmatworks/fastcp/internal/models"
+)
+
+const (
+	// PHPUser is the dedicated user for running FrankenPHP
+	PHPUser  = "fastcp"
+	PHPGroup = "fastcp"
 )
 
 // Manager manages PHP FrankenPHP instances and the main proxy
@@ -47,6 +55,60 @@ type ProxyInstance struct {
 	PIDFile   string
 	HTTPPort  int
 	HTTPSPort int
+}
+
+// EnsurePHPUser creates the fastcp system user if it doesn't exist
+// This user is used to run FrankenPHP with reduced privileges
+func EnsurePHPUser() error {
+	if runtime.GOOS != "linux" {
+		return nil // Only needed on Linux
+	}
+
+	// Check if user already exists
+	if _, err := user.Lookup(PHPUser); err == nil {
+		return nil // User exists
+	}
+
+	fmt.Printf("[FastCP] Creating system user '%s' for PHP...\n", PHPUser)
+
+	// Create system user with no login shell and no home directory
+	cmd := exec.Command("useradd",
+		"--system",           // System account
+		"--no-create-home",   // No home directory
+		"--shell", "/usr/sbin/nologin", // No login
+		"--user-group",       // Create matching group
+		PHPUser,
+	)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create user %s: %s - %s", PHPUser, err.Error(), string(output))
+	}
+
+	// Add fastcp user to www-data group for web file access
+	cmd = exec.Command("usermod", "-a", "-G", "www-data", PHPUser)
+	_ = cmd.Run() // Ignore error if www-data doesn't exist
+
+	fmt.Printf("[FastCP] User '%s' created successfully\n", PHPUser)
+	return nil
+}
+
+// GetPHPUserCredentials returns the UID and GID of the fastcp user
+func GetPHPUserCredentials() (uid, gid uint32, err error) {
+	u, err := user.Lookup(PHPUser)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	uidInt, err := strconv.Atoi(u.Uid)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	gidInt, err := strconv.Atoi(u.Gid)
+	if err != nil {
+		return 0, 0, err
+	}
+
+	return uint32(uidInt), uint32(gidInt), nil
 }
 
 // NewManager creates a new PHP instance manager
@@ -386,18 +448,46 @@ func (m *Manager) startInstance(version string) error {
 		return err
 	}
 
-	// Create log directory
+	// Create log directory with proper permissions for fastcp user
 	logDir := filepath.Join(cfg.LogDir, fmt.Sprintf("php-%s", version))
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return err
+	}
+
+	// Set ownership of log directory to fastcp user
+	if runtime.GOOS == "linux" {
+		if uid, gid, err := GetPHPUserCredentials(); err == nil {
+			os.Chown(logDir, int(uid), int(gid))
+			os.Chown(configPath, int(uid), int(gid))
+		}
 	}
 
 	// Start FrankenPHP process
 	cmd := exec.Command(instance.Config.BinaryPath, "run", "--config", configPath)
 	cmd.Stdout = nil
 	cmd.Stderr = nil
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Setpgid: true,
+
+	// Run as fastcp user on Linux for security
+	if runtime.GOOS == "linux" {
+		if uid, gid, err := GetPHPUserCredentials(); err == nil {
+			cmd.SysProcAttr = &syscall.SysProcAttr{
+				Setpgid: true,
+				Credential: &syscall.Credential{
+					Uid: uid,
+					Gid: gid,
+				},
+			}
+		} else {
+			// Fallback: just setpgid if user not found
+			fmt.Printf("[Warning] fastcp user not found, running PHP as current user: %v\n", err)
+			cmd.SysProcAttr = &syscall.SysProcAttr{
+				Setpgid: true,
+			}
+		}
+	} else {
+		cmd.SysProcAttr = &syscall.SysProcAttr{
+			Setpgid: true,
+		}
 	}
 
 	if err := cmd.Start(); err != nil {
