@@ -1,5 +1,9 @@
 # FastCP - Modern PHP Hosting Control Panel
 
+> **⚠️ WORK IN PROGRESS**
+> 
+> FastCP v2 is currently under active development. Features may be incomplete or change without notice. Not recommended for production use yet.
+
 <p align="center">
   <img src="https://via.placeholder.com/200x200/10b981/ffffff?text=F" alt="FastCP Logo" width="120">
 </p>
