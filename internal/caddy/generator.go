@@ -424,16 +424,16 @@ func (g *Generator) GeneratePHPInstance(version string, port, adminPort int, sit
 	// If no sites, create a minimal placeholder config
 	if len(versionSites) == 0 {
 		buf.WriteString(fmt.Sprintf("# No sites configured for PHP %s\n", version))
-		buf.WriteString(fmt.Sprintf("bind unix/%s\n", socketPath))
 		buf.WriteString("http:// {\n")
+		buf.WriteString(fmt.Sprintf("\tbind unix/%s\n", socketPath))
 		buf.WriteString("\trespond \"No sites configured\" 503\n")
 		buf.WriteString("}\n")
 		return buf.String(), nil
 	}
 
 	// Generate a single server block for all sites, listening on Unix socket
-	buf.WriteString(fmt.Sprintf("bind unix/%s\n\n", socketPath))
 	buf.WriteString("http:// {\n")
+	buf.WriteString(fmt.Sprintf("\tbind unix/%s\n\n", socketPath))
 
 	for _, site := range versionSites {
 		domains := []string{site.Domain}
