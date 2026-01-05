@@ -753,25 +753,25 @@ func setACL(path, username string) error {
 		return nil
 	}
 
-	// First, set strict Unix permissions (no access for others)
-	_ = exec.Command("chmod", "750", path).Run()
+	// First, set strict Unix permissions recursively (no access for others)
+	_ = exec.Command("chmod", "-R", "750", path).Run()
 
-	// Remove all default ACLs and set strict permissions
+	// Remove all default ACLs and set strict permissions recursively
 	// Owner has full access, fastcp user has read+execute for PHP, others have none
 	cmds := [][]string{
-		// Remove existing ACLs
-		{"setfacl", "-b", path},
-		// Set owner access
-		{"setfacl", "-m", fmt.Sprintf("u:%s:rwx", username), path},
-		// Set fastcp (PHP) user read+execute access
-		{"setfacl", "-m", "u:fastcp:rx", path},
-		// Set root access
-		{"setfacl", "-m", "u:root:rwx", path},
-		// Remove group access
-		{"setfacl", "-m", "g::---", path},
-		// Remove other users' access
-		{"setfacl", "-m", "o::---", path},
-		// Set default ACL for new files/dirs (inherit)
+		// Remove existing ACLs recursively
+		{"setfacl", "-R", "-b", path},
+		// Set owner access recursively
+		{"setfacl", "-R", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		// Set fastcp (PHP) user read+execute access recursively
+		{"setfacl", "-R", "-m", "u:fastcp:rx", path},
+		// Set root access recursively
+		{"setfacl", "-R", "-m", "u:root:rwx", path},
+		// Remove group access recursively
+		{"setfacl", "-R", "-m", "g::---", path},
+		// Remove other users' access recursively
+		{"setfacl", "-R", "-m", "o::---", path},
+		// Set default ACL for new files/dirs (inherit) - only on directories
 		{"setfacl", "-d", "-m", fmt.Sprintf("u:%s:rwx", username), path},
 		{"setfacl", "-d", "-m", "u:fastcp:rx", path},
 		{"setfacl", "-d", "-m", "u:root:rwx", path},

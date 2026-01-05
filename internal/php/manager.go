@@ -473,7 +473,7 @@ func (m *Manager) startInstance(version string) error {
 		return err
 	}
 
-	// Create log directory with proper permissions for fastcp user
+	// Create log directories with proper permissions for fastcp user
 	logDir := filepath.Join(cfg.LogDir, fmt.Sprintf("php-%s", version))
 	if err := os.MkdirAll(logDir, 0755); err != nil {
 		return err
@@ -488,9 +488,18 @@ func (m *Manager) startInstance(version string) error {
 	// Set ownership of directories to fastcp user
 	if runtime.GOOS == "linux" {
 		if uid, gid, err := GetPHPUserCredentials(); err == nil {
+			// Own the main log directory
+			os.Chown(cfg.LogDir, int(uid), int(gid))
 			os.Chown(logDir, int(uid), int(gid))
 			os.Chown(configPath, int(uid), int(gid))
 			os.Chown(socketDir, int(uid), int(gid))
+			
+			// Create and own the PHP log file
+			phpLogFile := filepath.Join(cfg.LogDir, fmt.Sprintf("php-%s.log", version))
+			if f, err := os.OpenFile(phpLogFile, os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+				f.Close()
+				os.Chown(phpLogFile, int(uid), int(gid))
+			}
 		}
 	}
 
