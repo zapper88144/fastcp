@@ -55,26 +55,40 @@ detect_os() {
         exit 1
     fi
 
-    case "$OS_NAME" in
-        ubuntu|debian)
-            PKG_MANAGER="apt-get"
-            PKG_UPDATE="apt-get update -qq"
-            PKG_INSTALL="apt-get install -y -qq"
-            ;;
-        centos|rhel|rocky|almalinux|fedora)
-            PKG_MANAGER="yum"
-            PKG_UPDATE="yum makecache -q"
-            PKG_INSTALL="yum install -y -q"
-            ;;
-        *)
-            echo -e "${YELLOW}Warning: Unsupported OS '$OS_NAME'. Attempting to continue...${NC}"
-            PKG_MANAGER="apt-get"
-            PKG_UPDATE="apt-get update -qq"
-            PKG_INSTALL="apt-get install -y -qq"
-            ;;
-    esac
+    # FastCP only supports Ubuntu 22.04 and newer
+    if [ "$OS_NAME" != "ubuntu" ]; then
+        echo -e "${RED}Error: FastCP only supports Ubuntu${NC}"
+        echo -e "${YELLOW}Detected OS: ${OS_NAME} ${OS_VERSION}${NC}"
+        echo ""
+        echo "Supported versions:"
+        echo "  - Ubuntu 22.04 LTS (Jammy Jellyfish)"
+        echo "  - Ubuntu 24.04 LTS (Noble Numbat)"
+        echo "  - Ubuntu 24.10 and newer"
+        exit 1
+    fi
 
-    echo -e "${BLUE}Detected OS: ${OS_NAME} ${OS_VERSION}${NC}"
+    # Check Ubuntu version (must be 22.04 or higher)
+    # Extract major version number
+    MAJOR_VERSION=$(echo "$OS_VERSION" | cut -d. -f1)
+    
+    if [ "$MAJOR_VERSION" -lt 22 ]; then
+        echo -e "${RED}Error: FastCP requires Ubuntu 22.04 or newer${NC}"
+        echo -e "${YELLOW}Detected version: Ubuntu ${OS_VERSION}${NC}"
+        echo ""
+        echo "Supported versions:"
+        echo "  - Ubuntu 22.04 LTS (Jammy Jellyfish)"
+        echo "  - Ubuntu 24.04 LTS (Noble Numbat)"
+        echo "  - Ubuntu 24.10 and newer"
+        echo ""
+        echo "Please upgrade your system to Ubuntu 22.04 or newer."
+        exit 1
+    fi
+
+    PKG_MANAGER="apt-get"
+    PKG_UPDATE="apt-get update -qq"
+    PKG_INSTALL="apt-get install -y -qq"
+
+    echo -e "${GREEN}✓ Detected OS: Ubuntu ${OS_VERSION}${NC}"
 }
 
 # Detect platform/architecture

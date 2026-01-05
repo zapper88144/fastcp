@@ -499,15 +499,34 @@ long_query_time = 2
 }
 
 // execMySQL executes a MySQL query as root
+// It tries password auth first (if password provided), then falls back to socket auth
 func (m *Manager) execMySQL(rootPwd, query string) error {
 	var cmd *exec.Cmd
+	var output []byte
+	var err error
+
+	// Try with password first if available
 	if rootPwd != "" {
 		cmd = exec.Command("mysql", "-u", "root", fmt.Sprintf("-p%s", rootPwd), "-e", query)
-	} else {
-		cmd = exec.Command("mysql", "-u", "root", "-e", query)
+		output, err = cmd.CombinedOutput()
+		if err == nil {
+			return nil
+		}
+		// Password auth failed, fall through to socket auth
 	}
 
-	if output, err := cmd.CombinedOutput(); err != nil {
+	// Try socket auth (works on Ubuntu 22.04+ when running as root)
+	// This uses auth_socket plugin which authenticates based on the OS user
+	cmd = exec.Command("mysql", "-u", "root", "-e", query)
+	output, err = cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+
+	// Last resort: try with explicit socket path
+	cmd = exec.Command("mysql", "-u", "root", "--socket=/var/run/mysqld/mysqld.sock", "-e", query)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
 		return fmt.Errorf("%s: %s", err.Error(), string(output))
 	}
 
