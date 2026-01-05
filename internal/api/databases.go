@@ -208,7 +208,7 @@ func (s *Server) getDatabaseStatus(w http.ResponseWriter, r *http.Request) {
 	s.success(w, status)
 }
 
-// installMySQL installs MySQL server
+// installMySQL installs MySQL server or adopts an existing installation
 func (s *Server) installMySQL(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.GetClaims(r)
 
@@ -217,8 +217,19 @@ func (s *Server) installMySQL(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if MySQL is already installed
 	if s.dbManager.IsMySQLInstalled() {
-		s.error(w, http.StatusConflict, "MySQL is already installed")
+		s.logger.Info("MySQL already installed, attempting to adopt", "user", claims.Username)
+
+		// Try to adopt the existing installation
+		if err := s.dbManager.AdoptMySQL(); err != nil {
+			s.logger.Error("failed to adopt existing MySQL", "error", err)
+			s.error(w, http.StatusInternalServerError, "MySQL is installed but FastCP cannot connect to it. Please ensure MySQL is running and accessible: "+err.Error())
+			return
+		}
+
+		s.logger.Info("MySQL adopted successfully", "user", claims.Username)
+		s.success(w, map[string]string{"message": "Existing MySQL installation configured successfully"})
 		return
 	}
 

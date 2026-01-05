@@ -103,17 +103,41 @@ func (m *Manager) IsMySQLInstalled() bool {
 		return false
 	}
 
-	// Check if mysql-server package is actually installed (not just the client)
-	cmd := exec.Command("dpkg", "-l", "mysql-server")
-	if err := cmd.Run(); err != nil {
-		// Try mariadb-server
-		cmd = exec.Command("dpkg", "-l", "mariadb-server")
-		if err := cmd.Run(); err != nil {
-			return false
-		}
+	// Method 1: Check if mysqld process exists
+	cmd := exec.Command("pgrep", "-x", "mysqld")
+	if err := cmd.Run(); err == nil {
+		return true // MySQL is running, so it's installed
 	}
 
-	return true
+	// Method 2: Check if mysql service exists in systemd
+	cmd = exec.Command("systemctl", "list-unit-files", "mysql.service")
+	if output, err := cmd.Output(); err == nil && strings.Contains(string(output), "mysql.service") {
+		return true
+	}
+
+	cmd = exec.Command("systemctl", "list-unit-files", "mariadb.service")
+	if output, err := cmd.Output(); err == nil && strings.Contains(string(output), "mariadb.service") {
+		return true
+	}
+
+	// Method 3: Check if mysql-server package is installed (dpkg shows 'ii' for installed)
+	cmd = exec.Command("dpkg-query", "-W", "-f=${Status}", "mysql-server")
+	if output, err := cmd.Output(); err == nil && strings.Contains(string(output), "install ok installed") {
+		return true
+	}
+
+	// Try mariadb-server
+	cmd = exec.Command("dpkg-query", "-W", "-f=${Status}", "mariadb-server")
+	if output, err := cmd.Output(); err == nil && strings.Contains(string(output), "install ok installed") {
+		return true
+	}
+
+	// Method 4: Check for mysqld binary
+	if _, err := exec.LookPath("mysqld"); err == nil {
+		return true
+	}
+
+	return false
 }
 
 // IsMySQLRunning checks if MySQL is running
@@ -170,7 +194,11 @@ func (m *Manager) InstallMySQL() error {
 	log("Starting MySQL service...")
 	cmd = exec.Command("systemctl", "start", "mysql")
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("failed to start MySQL: %s - %s", err.Error(), string(output))
+		// Try mariadb
+		cmd = exec.Command("systemctl", "start", "mariadb")
+		if output, err = cmd.CombinedOutput(); err != nil {
+			return fmt.Errorf("failed to start MySQL: %s - %s", err.Error(), string(output))
+		}
 	}
 	log("MySQL service started")
 
@@ -179,12 +207,50 @@ func (m *Manager) InstallMySQL() error {
 	cmd = exec.Command("systemctl", "enable", "mysql")
 	_ = cmd.Run()
 
-	// Secure MySQL installation
+	// Secure MySQL installation (optional - don't fail if it doesn't work)
 	log("Securing MySQL installation...")
 	if err := m.secureMySQLInstallation(); err != nil {
-		return fmt.Errorf("failed to secure MySQL: %w", err)
+		log(fmt.Sprintf("Warning: Could not fully secure MySQL: %v", err))
+		log("FastCP will use socket authentication instead.")
 	}
 	log("MySQL installation complete!")
+
+	return nil
+}
+
+// AdoptMySQL configures FastCP to work with an existing MySQL installation
+// This is called when MySQL is already installed but FastCP hasn't set it up
+func (m *Manager) AdoptMySQL() error {
+	if runtime.GOOS != "linux" {
+		return errors.New("MySQL adoption only supported on Linux")
+	}
+
+	log := func(msg string) {
+		fmt.Printf("[MySQL Adopt] %s\n", msg)
+	}
+
+	log("Adopting existing MySQL installation...")
+
+	// Make sure MySQL is running
+	if !m.IsMySQLRunning() {
+		log("Starting MySQL service...")
+		cmd := exec.Command("systemctl", "start", "mysql")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			cmd = exec.Command("systemctl", "start", "mariadb")
+			if output, err = cmd.CombinedOutput(); err != nil {
+				return fmt.Errorf("failed to start MySQL: %s", string(output))
+			}
+		}
+	}
+
+	// Test if we can connect using socket auth (running as root)
+	log("Testing MySQL connection...")
+	if err := m.execMySQL("", "SELECT 1;"); err != nil {
+		return fmt.Errorf("cannot connect to MySQL: %w", err)
+	}
+
+	log("MySQL connection successful!")
+	log("FastCP will use socket authentication for database operations.")
 
 	return nil
 }
