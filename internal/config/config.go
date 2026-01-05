@@ -90,6 +90,7 @@ func DefaultConfig() *models.Config {
 	return &models.Config{
 		AdminUser:     "admin",
 		AdminPassword: "fastcp2024!", // Default password - should be changed
+		AdminEmail:    "support@fastcp.org",
 		JWTSecret:     "change-this-secret-in-production-please",
 		DataDir:       dataDir,
 		SitesDir:      sitesDir,
