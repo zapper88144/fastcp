@@ -59,3 +59,13 @@ tmp/
 temp/
 *.tmp
 
+# Air (hot reload)
+tmp/
+
+# Docker
+.docker/
+
+# Local development data
+.fastcp/
+sites/
+

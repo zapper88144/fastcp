@@ -7,16 +7,14 @@ import (
 	"strings"
 )
 
-//go:embed dist/*
+//go:embed all:dist
 var distFS embed.FS
 
 // HasEmbeddedFiles checks if the React app was embedded during build
 func HasEmbeddedFiles() bool {
-	entries, err := distFS.ReadDir("dist")
-	if err != nil {
-		return false
-	}
-	return len(entries) > 0
+	// Check for index.html specifically (not just any file like .gitkeep)
+	_, err := distFS.ReadFile("dist/index.html")
+	return err == nil
 }
 
 // Handler returns an http.Handler for serving the embedded static files
@@ -32,19 +30,29 @@ func Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 
-		// Try to serve the file directly
-		if path != "/" && !strings.HasSuffix(path, "/") {
-			// Check if file exists
-			if f, err := sub.Open(strings.TrimPrefix(path, "/")); err == nil {
-				f.Close()
-				fileServer.ServeHTTP(w, r)
-				return
-			}
+		// Serve static assets directly
+		if strings.HasPrefix(path, "/assets/") || 
+		   strings.HasSuffix(path, ".js") || 
+		   strings.HasSuffix(path, ".css") || 
+		   strings.HasSuffix(path, ".svg") ||
+		   strings.HasSuffix(path, ".ico") ||
+		   strings.HasSuffix(path, ".png") ||
+		   strings.HasSuffix(path, ".jpg") ||
+		   strings.HasSuffix(path, ".woff") ||
+		   strings.HasSuffix(path, ".woff2") {
+			fileServer.ServeHTTP(w, r)
+			return
 		}
 
-		// For SPA: serve index.html for all routes
-		r.URL.Path = "/"
-		fileServer.ServeHTTP(w, r)
+		// For SPA: serve index.html for all other routes
+		indexHTML, err := sub.(fs.ReadFileFS).ReadFile("index.html")
+		if err != nil {
+			http.Error(w, "index.html not found", http.StatusInternalServerError)
+			return
+		}
+		
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Write(indexHTML)
 	})
 }
 

@@ -1,4 +1,4 @@
-.PHONY: all build build-frontend build-backend run dev clean install-deps
+.PHONY: all build build-frontend build-backend run dev clean install-deps docker-dev docker-prod docker-build
 
 # Variables
 BINARY_NAME=fastcp
@@ -73,6 +73,31 @@ release: clean build-linux
 	cd bin && sha256sum $(BINARY_NAME)-* > checksums.txt
 	@echo "Release files ready in bin/"
 
+# ==================== Docker ====================
+
+# Run in Docker (development with hot reload)
+docker-dev:
+	@echo "Starting FastCP in Docker (development mode)..."
+	docker compose up dev
+
+# Run in Docker (production test)
+docker-prod:
+	@echo "Starting FastCP in Docker (production mode)..."
+	docker compose up prod --build
+
+# Build Docker image
+docker-build:
+	@echo "Building Docker image..."
+	docker build -t fastcp:latest .
+
+# Stop Docker containers
+docker-down:
+	docker compose down
+
+# View Docker logs
+docker-logs:
+	docker compose logs -f
+
 # Help
 help:
 	@echo "FastCP Makefile"
@@ -87,6 +112,12 @@ help:
 	@echo "  make test           Run tests"
 	@echo "  make build-linux    Cross-compile for Linux (x86_64 + ARM64)"
 	@echo "  make release        Build and prepare release files"
+	@echo ""
+	@echo "Docker:"
+	@echo "  make docker-dev     Run in Docker with hot reload"
+	@echo "  make docker-prod    Run production build in Docker"
+	@echo "  make docker-build   Build Docker image"
+	@echo "  make docker-down    Stop Docker containers"
 	@echo ""
 	@echo "Environment Variables:"
 	@echo "  FASTCP_DEV=1        Enable development mode (local directories)"

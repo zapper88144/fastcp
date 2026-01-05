@@ -5,8 +5,6 @@ import {
   Trash2,
   Copy,
   Check,
-  Eye,
-  EyeOff,
   Shield,
   RefreshCw,
   Loader2,
