@@ -1,6 +1,6 @@
-# Binaries
-fastcp
-fastcp-*
+# Binaries (in root only, not cmd/fastcp/)
+/fastcp
+/fastcp-*
 *.exe
 bin/
 
