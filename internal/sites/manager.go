@@ -364,19 +364,173 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
 		}
 	}
 
-	// Create default index.php
+	// Create default index.php with beautiful FastCP landing page
 	indexPath := filepath.Join(site.RootPath, site.PublicPath, "index.php")
 	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
 		content := fmt.Sprintf(`<?php
 // Site: %s
 // Domain: %s
-// Created by FastCP
-
-echo '<h1>Welcome to %s</h1>';
-echo '<p>Your site is ready! Replace this file with your application.</p>';
-echo '<p>PHP Version: ' . PHP_VERSION . '</p>';
-echo '<p>Server: ' . $_SERVER['SERVER_SOFTWARE'] . '</p>';
-`, site.Name, site.Domain, site.Name)
+// Powered by FastCP - https://fastcp.org
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><?= htmlspecialchars('%s') ?> - Powered by FastCP</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #0f172a 0%%, #1e293b 50%%, #0f172a 100%%);
+            color: #f8fafc;
+            padding: 1.5rem;
+        }
+        .container {
+            text-align: center;
+            max-width: 480px;
+        }
+        .logo {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 1.5rem;
+            background: linear-gradient(135deg, #10b981, #059669);
+            border-radius: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 20px 50px rgba(16, 185, 129, 0.3);
+        }
+        .logo span {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: white;
+        }
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+            background: linear-gradient(135deg, #f8fafc, #94a3b8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .domain {
+            color: #10b981;
+            font-size: 1rem;
+            font-weight: 500;
+            margin-bottom: 2rem;
+        }
+        .card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.06);
+            border-radius: 16px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            backdrop-filter: blur(10px);
+        }
+        .card p {
+            color: #94a3b8;
+            line-height: 1.7;
+            font-size: 0.95rem;
+        }
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid rgba(255,255,255,0.06);
+        }
+        .stat {
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #f8fafc;
+        }
+        .stat-label {
+            font-size: 0.75rem;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-top: 0.25rem;
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            padding: 0.5rem 1rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+        .badge::before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: #10b981;
+            border-radius: 50%%;
+            animation: pulse 2s infinite;
+        }
+        @keyframes pulse {
+            0%%, 100%% { opacity: 1; }
+            50%% { opacity: 0.5; }
+        }
+        .footer {
+            margin-top: 2rem;
+            color: #475569;
+            font-size: 0.8rem;
+        }
+        .footer a {
+            color: #10b981;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo"><span>F</span></div>
+        <h1><?= htmlspecialchars('%s') ?></h1>
+        <p class="domain"><?= htmlspecialchars($_SERVER['HTTP_HOST']) ?></p>
+        
+        <div class="card">
+            <p>Your site is live and ready! Replace this page with your application by uploading files to the public directory.</p>
+            <div class="stats">
+                <div class="stat">
+                    <div class="stat-value"><?= PHP_VERSION ?></div>
+                    <div class="stat-label">PHP Version</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-value"><?= php_uname('s') ?></div>
+                    <div class="stat-label">Platform</div>
+                </div>
+            </div>
+        </div>
+        
+        <span class="badge">Powered by FrankenPHP</span>
+        
+        <p class="footer">
+            Managed by <a href="https://fastcp.org" target="_blank">FastCP</a> • 
+            High-Performance PHP Hosting
+        </p>
+    </div>
+</body>
+</html>
+`, site.Name, site.Domain, site.Name, site.Name)
 		if err := os.WriteFile(indexPath, []byte(content), 0644); err != nil {
 			return err
 		}
