@@ -247,6 +247,48 @@ export function DatabasesPage() {
           <p className="text-muted-foreground mb-6 max-w-md mx-auto">
             MySQL server is not installed on this system. Click below to install and secure MySQL automatically.
           </p>
+
+          {/* Installation progress */}
+          {installing && installStatus?.in_progress && (
+            <div className="mb-6 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg max-w-md mx-auto">
+              <div className="flex items-center gap-3">
+                <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+                <div className="text-left">
+                  <p className="text-blue-400 font-medium">Installing MySQL...</p>
+                  <p className="text-sm text-muted-foreground">
+                    {installStatus.message || 'This may take a few minutes. Please wait...'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Installation error */}
+          {installStatus && !installStatus.in_progress && installStatus.error && (
+            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-lg max-w-md mx-auto">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
+                <div className="text-left">
+                  <p className="text-red-400 font-medium">Installation Failed</p>
+                  <p className="text-sm text-muted-foreground">{installStatus.error}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Installation success */}
+          {installStatus && !installStatus.in_progress && installStatus.success && (
+            <div className="mb-6 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-lg max-w-md mx-auto">
+              <div className="flex items-center gap-3">
+                <Check className="w-5 h-5 text-emerald-400" />
+                <div className="text-left">
+                  <p className="text-emerald-400 font-medium">MySQL Installed Successfully!</p>
+                  <p className="text-sm text-muted-foreground">{installStatus.message}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
           {user?.role === 'admin' ? (
             <button
               onClick={handleInstall}
