@@ -4,6 +4,15 @@
 > 
 > FastCP v2 is currently under active development. Features may be incomplete or change without notice. Not recommended for production use yet.
 
+> **🔴 SECURITY NOTICE: SHARED PHP ENVIRONMENT**
+> 
+> Currently, all websites share the same PHP process (FrankenPHP runs as a single user). This means:
+> - A PHP script from one site **can access files from other sites**
+> - **Do NOT use** for untrusted multi-tenant hosting
+> - **Safe for:** Single user, trusted teams, agencies managing their own sites
+> 
+> Per-user PHP isolation is planned for a future release.
+
 <p align="center">
   <img src="https://via.placeholder.com/200x200/10b981/ffffff?text=F" alt="FastCP Logo" width="120">
 </p>
