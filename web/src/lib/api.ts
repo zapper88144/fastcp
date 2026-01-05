@@ -247,6 +247,19 @@ class APIClient {
   async getMySQLInstallStatus(): Promise<MySQLInstallStatus> {
     return this.request('/databases/install/status')
   }
+
+  // Version & Upgrade
+  async getVersion(): Promise<VersionCheckResult> {
+    return this.request('/version')
+  }
+
+  async startUpgrade(): Promise<{ message: string; status: string }> {
+    return this.request('/upgrade', { method: 'POST' })
+  }
+
+  async getUpgradeStatus(): Promise<UpgradeStatus> {
+    return this.request('/upgrade/status')
+  }
 }
 
 // Database types
@@ -282,6 +295,27 @@ export interface MySQLInstallStatus {
   error?: string
   message?: string
   started_at?: string
+}
+
+export interface VersionCheckResult {
+  current_version: string
+  latest_version: string
+  update_available: boolean
+  release_name?: string
+  release_url?: string
+  changelog?: string
+  published_at?: string
+  check_error?: string
+}
+
+export interface UpgradeStatus {
+  in_progress: boolean
+  success: boolean
+  error?: string
+  message?: string
+  progress?: number
+  started_at?: string
+  completed_at?: string
 }
 
 // User types

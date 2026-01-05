@@ -44,6 +44,84 @@ check_root() {
     fi
 }
 
+# Check if a port is in use
+is_port_in_use() {
+    local port=$1
+    if command -v ss &> /dev/null; then
+        ss -tuln | grep -q ":${port} "
+    elif command -v netstat &> /dev/null; then
+        netstat -tuln | grep -q ":${port} "
+    elif command -v lsof &> /dev/null; then
+        lsof -i :${port} &> /dev/null
+    else
+        # If no tool available, assume port is free
+        return 1
+    fi
+}
+
+# Get process using a port
+get_port_process() {
+    local port=$1
+    if command -v ss &> /dev/null; then
+        ss -tulnp | grep ":${port} " | awk '{print $7}' | head -1 | sed 's/.*"\(.*\)".*/\1/'
+    elif command -v lsof &> /dev/null; then
+        lsof -i :${port} -t 2>/dev/null | head -1 | xargs -I{} ps -p {} -o comm= 2>/dev/null
+    else
+        echo "unknown"
+    fi
+}
+
+# Check required ports are available
+check_ports() {
+    echo ""
+    echo -e "${YELLOW}Checking required ports...${NC}"
+    
+    local ports_in_use=""
+    local has_conflict=false
+    
+    # Check port 80 (HTTP)
+    if is_port_in_use 80; then
+        local proc=$(get_port_process 80)
+        ports_in_use="${ports_in_use}\n  - Port 80 (HTTP) is in use${proc:+ by: $proc}"
+        has_conflict=true
+    fi
+    
+    # Check port 443 (HTTPS)
+    if is_port_in_use 443; then
+        local proc=$(get_port_process 443)
+        ports_in_use="${ports_in_use}\n  - Port 443 (HTTPS) is in use${proc:+ by: $proc}"
+        has_conflict=true
+    fi
+    
+    # Check port 8080 (Admin Panel) - use configured port
+    if is_port_in_use ${API_PORT}; then
+        local proc=$(get_port_process ${API_PORT})
+        ports_in_use="${ports_in_use}\n  - Port ${API_PORT} (Admin Panel) is in use${proc:+ by: $proc}"
+        has_conflict=true
+    fi
+    
+    if [ "$has_conflict" = true ]; then
+        echo -e "${RED}Error: Required ports are already in use${NC}"
+        echo -e "${ports_in_use}"
+        echo ""
+        echo -e "${YELLOW}FastCP requires the following ports to be available:${NC}"
+        echo "  - Port 80   : HTTP traffic for websites"
+        echo "  - Port 443  : HTTPS traffic for websites"
+        echo "  - Port ${API_PORT} : FastCP admin panel"
+        echo ""
+        echo "Please stop the conflicting services before installing FastCP."
+        echo ""
+        echo "Common commands to stop web servers:"
+        echo "  sudo systemctl stop nginx"
+        echo "  sudo systemctl stop apache2"
+        echo "  sudo systemctl stop httpd"
+        echo ""
+        exit 1
+    fi
+    
+    echo -e "${GREEN}✓ All required ports are available (80, 443, ${API_PORT})${NC}"
+}
+
 # Detect OS
 detect_os() {
     if [ -f /etc/os-release ]; then
@@ -452,6 +530,7 @@ main() {
     detect_os
     detect_platform
     prompt_configuration
+    check_ports
     install_dependencies
     get_latest_version
     install_fastcp

@@ -289,25 +289,17 @@ export function DatabasesPage() {
             </div>
           )}
 
-          {user?.role === 'admin' ? (
+          {/* Only show button when not installing */}
+          {!installing && user?.role === 'admin' && (
             <button
               onClick={handleInstall}
-              disabled={installing}
-              className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors disabled:opacity-50"
+              className="inline-flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg transition-colors"
             >
-              {installing ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  Installing MySQL...
-                </>
-              ) : (
-                <>
-                  <Server className="w-5 h-5" />
-                  Install MySQL
-                </>
-              )}
+              <Server className="w-5 h-5" />
+              Install MySQL
             </button>
-          ) : (
+          )}
+          {!installing && user?.role !== 'admin' && (
             <p className="text-amber-400">Contact an administrator to install MySQL.</p>
           )}
         </div>

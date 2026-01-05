@@ -16,16 +16,18 @@ import (
 	"github.com/rehmatworks/fastcp/internal/php"
 	"github.com/rehmatworks/fastcp/internal/sites"
 	"github.com/rehmatworks/fastcp/internal/static"
+	"github.com/rehmatworks/fastcp/internal/upgrade"
 )
 
 // Server holds all API handlers and dependencies
 type Server struct {
-	router       chi.Router
-	siteManager  *sites.Manager
-	phpManager   *php.Manager
-	dbManager    *database.Manager
-	caddyGen     *caddy.Generator
-	logger       *slog.Logger
+	router         chi.Router
+	siteManager    *sites.Manager
+	phpManager     *php.Manager
+	dbManager      *database.Manager
+	caddyGen       *caddy.Generator
+	upgradeManager *upgrade.Manager
+	logger         *slog.Logger
 }
 
 // NewServer creates a new API server
@@ -34,14 +36,16 @@ func NewServer(
 	phpManager *php.Manager,
 	dbManager *database.Manager,
 	caddyGen *caddy.Generator,
+	upgradeManager *upgrade.Manager,
 	logger *slog.Logger,
 ) *Server {
 	s := &Server{
-		siteManager: siteManager,
-		phpManager:  phpManager,
-		dbManager:   dbManager,
-		caddyGen:    caddyGen,
-		logger:      logger,
+		siteManager:    siteManager,
+		phpManager:     phpManager,
+		dbManager:      dbManager,
+		caddyGen:       caddyGen,
+		upgradeManager: upgradeManager,
+		logger:         logger,
 	}
 
 	s.setupRoutes()
@@ -139,6 +143,9 @@ func (s *Server) setupRoutes() {
 			// Dashboard stats
 			r.Get("/stats", s.getStats)
 
+			// Version info (available to all authenticated users)
+			r.Get("/version", s.getVersion)
+
 			// Admin-only routes
 			r.Group(func(r chi.Router) {
 				r.Use(middleware.AdminOnlyMiddleware)
@@ -166,6 +173,12 @@ func (s *Server) setupRoutes() {
 
 				// System
 				r.Post("/reload", s.reloadAll)
+
+				// Upgrade (admin only)
+				r.Route("/upgrade", func(r chi.Router) {
+					r.Post("/", s.startUpgrade)
+					r.Get("/status", s.getUpgradeStatus)
+				})
 			})
 		})
 	})

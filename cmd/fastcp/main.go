@@ -19,6 +19,7 @@ import (
 	"github.com/rehmatworks/fastcp/internal/jail"
 	"github.com/rehmatworks/fastcp/internal/php"
 	"github.com/rehmatworks/fastcp/internal/sites"
+	"github.com/rehmatworks/fastcp/internal/upgrade"
 )
 
 var (
@@ -136,12 +137,21 @@ func main() {
 	dbManager := database.NewManager()
 	logger.Info("Database manager initialized")
 
+	// Initialize upgrade manager
+	upgradeManager := upgrade.NewManager(version, cfg.DataDir)
+	if upgradeManager.CheckLockFile() {
+		logger.Warn("Upgrade lock file found - previous upgrade may have been interrupted")
+		upgradeManager.CleanupLockFile()
+	}
+	logger.Info("Upgrade manager initialized", "version", version)
+
 	// Create API server
 	apiServer := api.NewServer(
 		siteManager,
 		phpManager,
 		dbManager,
 		caddyGen,
+		upgradeManager,
 		logger,
 	)
 
