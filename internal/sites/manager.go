@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -371,6 +372,16 @@ func (m *Manager) Delete(id string) error {
 	site, ok := m.sites[id]
 	if !ok {
 		return ErrSiteNotFound
+	}
+
+	// Remove site directory from filesystem
+	if site.RootPath != "" && site.RootPath != "/" && site.RootPath != "/var/www" {
+		if err := os.RemoveAll(site.RootPath); err != nil {
+			// Log but don't fail - directory might already be gone
+			slog.Warn("failed to remove site directory", "path", site.RootPath, "error", err)
+		} else {
+			slog.Info("removed site directory", "path", site.RootPath)
+		}
 	}
 
 	// Remove domain mappings
