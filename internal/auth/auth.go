@@ -5,6 +5,10 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"errors"
+	"os/exec"
+	"os/user"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -20,7 +24,11 @@ var (
 	ErrTokenExpired       = errors.New("token expired")
 	ErrAPIKeyNotFound     = errors.New("api key not found")
 	ErrAPIKeyExpired      = errors.New("api key expired")
+	ErrUserNotAllowed     = errors.New("user not allowed to access FastCP")
 )
+
+// AllowedGroups defines which Unix groups can access FastCP
+var AllowedGroups = []string{"root", "sudo", "wheel", "admin", "fastcp"}
 
 // Claims represents JWT claims
 type Claims struct {
@@ -31,8 +39,70 @@ type Claims struct {
 }
 
 // Authenticate authenticates a user with username and password
-// For now, uses hardcoded credentials. Later will use Unix users.
+// Uses Unix/PAM authentication on Linux, falls back to config-based auth
 func Authenticate(username, password string) (*models.User, error) {
+	// First try Unix authentication (Linux only)
+	if runtime.GOOS == "linux" {
+		if user, err := authenticateUnix(username, password); err == nil {
+			return user, nil
+		}
+	}
+
+	// Fallback to config-based authentication (for dev mode or non-Linux)
+	return authenticateConfig(username, password)
+}
+
+// authenticateUnix authenticates against Unix/PAM
+func authenticateUnix(username, password string) (*models.User, error) {
+	// Verify user exists in the system
+	u, err := user.Lookup(username)
+	if err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	// Check if user is in an allowed group
+	if !isUserInAllowedGroup(username) {
+		return nil, ErrUserNotAllowed
+	}
+
+	// Authenticate using PAM via su command
+	// This is a simple approach; for production, consider using the pam library
+	cmd := exec.Command("su", "-c", "true", username)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	if err := cmd.Start(); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	// Write password to stdin
+	_, _ = stdin.Write([]byte(password + "\n"))
+	stdin.Close()
+
+	if err := cmd.Wait(); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	// Determine role based on groups
+	role := "user"
+	if isUserInGroup(username, "root") || isUserInGroup(username, "sudo") || isUserInGroup(username, "wheel") {
+		role = "admin"
+	}
+
+	return &models.User{
+		ID:        u.Uid,
+		Username:  username,
+		Email:     username + "@localhost",
+		Role:      role,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}, nil
+}
+
+// authenticateConfig authenticates against config file (fallback)
+func authenticateConfig(username, password string) (*models.User, error) {
 	cfg := config.Get()
 
 	// Constant-time comparison to prevent timing attacks
@@ -43,7 +113,7 @@ func Authenticate(username, password string) (*models.User, error) {
 		return &models.User{
 			ID:        "admin",
 			Username:  cfg.AdminUser,
-			Email:     "admin@localhost",
+			Email:     cfg.AdminEmail,
 			Role:      "admin",
 			CreatedAt: time.Now(),
 			UpdatedAt: time.Now(),
@@ -51,6 +121,40 @@ func Authenticate(username, password string) (*models.User, error) {
 	}
 
 	return nil, ErrInvalidCredentials
+}
+
+// isUserInAllowedGroup checks if user belongs to any allowed group
+func isUserInAllowedGroup(username string) bool {
+	for _, group := range AllowedGroups {
+		if isUserInGroup(username, group) {
+			return true
+		}
+	}
+	return false
+}
+
+// isUserInGroup checks if a user belongs to a specific group
+func isUserInGroup(username, groupName string) bool {
+	// Special case for root
+	if username == "root" && groupName == "root" {
+		return true
+	}
+
+	// Use the 'groups' command to get user's groups
+	cmd := exec.Command("groups", username)
+	output, err := cmd.Output()
+	if err != nil {
+		return false
+	}
+
+	groups := strings.Fields(string(output))
+	// Output format: "username : group1 group2 group3" or just "group1 group2 group3"
+	for _, g := range groups {
+		if g == groupName {
+			return true
+		}
+	}
+	return false
 }
 
 // GenerateToken generates a JWT token for a user
