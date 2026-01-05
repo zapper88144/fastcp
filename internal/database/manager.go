@@ -323,20 +323,28 @@ func (m *Manager) Create(db *models.Database) (*models.Database, error) {
 		return nil, fmt.Errorf("failed to create database: %w", err)
 	}
 
-	// Create user
-	if err := m.execMySQL(rootPwd, fmt.Sprintf("CREATE USER '%s'@'localhost' IDENTIFIED BY '%s';", db.Username, db.Password)); err != nil {
+	// Create user for both localhost and 127.0.0.1 to handle both socket and TCP connections
+	// Using 127.0.0.1 since we force TCP connections in wp-config
+	if err := m.execMySQL(rootPwd, fmt.Sprintf("CREATE USER '%s'@'127.0.0.1' IDENTIFIED BY '%s';", db.Username, db.Password)); err != nil {
 		// Rollback: drop database
 		m.execMySQL(rootPwd, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`;", db.Name))
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
-	// Grant privileges
-	if err := m.execMySQL(rootPwd, fmt.Sprintf("GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'localhost';", db.Name, db.Username)); err != nil {
+	// Also create for localhost to handle socket connections
+	_ = m.execMySQL(rootPwd, fmt.Sprintf("CREATE USER '%s'@'localhost' IDENTIFIED BY '%s';", db.Username, db.Password))
+
+	// Grant privileges for both hosts
+	if err := m.execMySQL(rootPwd, fmt.Sprintf("GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'127.0.0.1';", db.Name, db.Username)); err != nil {
 		// Rollback
+		m.execMySQL(rootPwd, fmt.Sprintf("DROP USER IF EXISTS '%s'@'127.0.0.1';", db.Username))
 		m.execMySQL(rootPwd, fmt.Sprintf("DROP USER IF EXISTS '%s'@'localhost';", db.Username))
 		m.execMySQL(rootPwd, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`;", db.Name))
 		return nil, fmt.Errorf("failed to grant privileges: %w", err)
 	}
+
+	// Grant for localhost too
+	_ = m.execMySQL(rootPwd, fmt.Sprintf("GRANT ALL PRIVILEGES ON `%s`.* TO '%s'@'localhost';", db.Name, db.Username))
 
 	// Flush privileges
 	m.execMySQL(rootPwd, "FLUSH PRIVILEGES;")
@@ -390,8 +398,9 @@ func (m *Manager) Delete(id string) error {
 
 	rootPwd, _ := m.getRootPassword()
 
-	// Drop user
+	// Drop users from both hosts
 	m.execMySQL(rootPwd, fmt.Sprintf("DROP USER IF EXISTS '%s'@'localhost';", db.Username))
+	m.execMySQL(rootPwd, fmt.Sprintf("DROP USER IF EXISTS '%s'@'127.0.0.1';", db.Username))
 
 	// Drop database
 	if err := m.execMySQL(rootPwd, fmt.Sprintf("DROP DATABASE IF EXISTS `%s`;", db.Name)); err != nil {
@@ -418,9 +427,12 @@ func (m *Manager) UpdatePassword(id, newPassword string) error {
 
 	rootPwd, _ := m.getRootPassword()
 
-	if err := m.execMySQL(rootPwd, fmt.Sprintf("ALTER USER '%s'@'localhost' IDENTIFIED BY '%s';", db.Username, newPassword)); err != nil {
+	// Update password for both hosts
+	if err := m.execMySQL(rootPwd, fmt.Sprintf("ALTER USER '%s'@'127.0.0.1' IDENTIFIED BY '%s';", db.Username, newPassword)); err != nil {
 		return fmt.Errorf("failed to update password: %w", err)
 	}
+	// Also update localhost user if it exists
+	_ = m.execMySQL(rootPwd, fmt.Sprintf("ALTER USER '%s'@'localhost' IDENTIFIED BY '%s';", db.Username, newPassword))
 
 	m.execMySQL(rootPwd, "FLUSH PRIVILEGES;")
 
