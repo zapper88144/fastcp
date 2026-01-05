@@ -5,7 +5,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
+	"os/user"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"sync"
 	"time"
 
@@ -128,8 +132,18 @@ func (m *Manager) Create(site *models.Site) (*models.Site, error) {
 	if site.PublicPath == "" {
 		site.PublicPath = "public"
 	}
+	
+	// Set root path based on user ownership
+	// Structure: /var/www/{username}/{domain}/
 	if site.RootPath == "" {
-		site.RootPath = filepath.Join(cfg.SitesDir, site.Domain)
+		username := getUsernameFromID(site.UserID)
+		if username != "" && username != "admin" {
+			// User-specific directory
+			site.RootPath = filepath.Join(cfg.SitesDir, username, site.Domain)
+		} else {
+			// Fallback for admin or config-based auth
+			site.RootPath = filepath.Join(cfg.SitesDir, site.Domain)
+		}
 	}
 
 	site.CreatedAt = time.Now()
