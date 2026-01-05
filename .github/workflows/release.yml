@@ -60,6 +60,8 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             VERSION=${{ github.event.inputs.version }}
           fi
+          # Strip 'v' prefix for clean version number (frontend adds 'v' for display)
+          VERSION=${VERSION#v}
           
           go build -ldflags="-s -w -X main.version=${VERSION}" \
             -o fastcp-${{ matrix.suffix }} \
