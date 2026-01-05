@@ -637,14 +637,24 @@ func (s *Server) fixUserPermissions(w http.ResponseWriter, r *http.Request) {
 }
 
 // setUserDirACL applies ACL to a user directory
+// Includes read access for fastcp user (PHP execution)
 func setUserDirACL(path, username string) {
 	cmds := [][]string{
+		// Clear existing ACLs
 		{"setfacl", "-b", path},
+		// Owner has full access
 		{"setfacl", "-R", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		// fastcp user has read+execute for PHP
+		{"setfacl", "-R", "-m", "u:fastcp:rx", path},
+		// Root has full access
 		{"setfacl", "-R", "-m", "u:root:rwx", path},
+		// No group access
 		{"setfacl", "-R", "-m", "g::---", path},
+		// No other users access
 		{"setfacl", "-R", "-m", "o::---", path},
+		// Default ACLs for new files (inherit)
 		{"setfacl", "-d", "-m", fmt.Sprintf("u:%s:rwx", username), path},
+		{"setfacl", "-d", "-m", "u:fastcp:rx", path},
 		{"setfacl", "-d", "-m", "u:root:rwx", path},
 		{"setfacl", "-d", "-m", "g::---", path},
 		{"setfacl", "-d", "-m", "o::---", path},

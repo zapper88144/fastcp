@@ -66,20 +66,45 @@ func EnsurePHPUser() error {
 
 	// Check if user already exists
 	if _, err := user.Lookup(PHPUser); err == nil {
+		fmt.Printf("[FastCP] User '%s' already exists\n", PHPUser)
 		return nil // User exists
 	}
 
 	fmt.Printf("[FastCP] Creating system user '%s' for PHP...\n", PHPUser)
 
-	// Create system user with no login shell and no home directory
-	cmd := exec.Command("useradd",
-		"--system",           // System account
-		"--no-create-home",   // No home directory
-		"--shell", "/usr/sbin/nologin", // No login
-		"--user-group",       // Create matching group
-		PHPUser,
-	)
+	// Check if group already exists
+	groupExists := false
+	if output, err := exec.Command("getent", "group", PHPGroup).Output(); err == nil && len(output) > 0 {
+		groupExists = true
+	}
+
+	var cmd *exec.Cmd
+	if groupExists {
+		// Group exists, create user and add to existing group
+		cmd = exec.Command("useradd",
+			"--system",                       // System account
+			"--no-create-home",               // No home directory
+			"--shell", "/usr/sbin/nologin",   // No login
+			"-g", PHPGroup,                   // Use existing group
+			PHPUser,
+		)
+	} else {
+		// Create user with matching group
+		cmd = exec.Command("useradd",
+			"--system",                       // System account
+			"--no-create-home",               // No home directory
+			"--shell", "/usr/sbin/nologin",   // No login
+			"--user-group",                   // Create matching group
+			PHPUser,
+		)
+	}
+
 	if output, err := cmd.CombinedOutput(); err != nil {
+		// Check if user was created despite error (race condition)
+		if _, lookupErr := user.Lookup(PHPUser); lookupErr == nil {
+			fmt.Printf("[FastCP] User '%s' already exists (concurrent creation)\n", PHPUser)
+			return nil
+		}
 		return fmt.Errorf("failed to create user %s: %s - %s", PHPUser, err.Error(), string(output))
 	}
 
