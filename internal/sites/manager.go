@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"os/user"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -27,8 +28,17 @@ import (
 var (
 	ErrSiteNotFound      = errors.New("site not found")
 	ErrDomainExists      = errors.New("domain already exists")
+	ErrInvalidDomain     = errors.New("invalid domain name")
+	ErrInvalidSiteName   = errors.New("invalid site name")
 	ErrInvalidPHPVersion = errors.New("invalid PHP version")
 	ErrSiteLimitReached  = errors.New("site limit reached")
+
+	// Domain validation regex - allows letters, numbers, hyphens, dots
+	// Must start and end with alphanumeric, no consecutive dots/hyphens
+	domainRegex = regexp.MustCompile(`^([a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$`)
+	
+	// Site name validation - alphanumeric, spaces, hyphens, underscores
+	siteNameRegex = regexp.MustCompile(`^[a-zA-Z0-9\s\-_\.]{1,100}$`)
 )
 
 // Manager manages website configurations
@@ -118,6 +128,21 @@ func (m *Manager) Save() error {
 func (m *Manager) Create(site *models.Site) (*models.Site, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+
+	// Validate domain name
+	if !isValidDomain(site.Domain) {
+		return nil, ErrInvalidDomain
+	}
+	for _, alias := range site.Aliases {
+		if !isValidDomain(alias) {
+			return nil, fmt.Errorf("invalid alias: %s", alias)
+		}
+	}
+
+	// Validate site name (prevent XSS)
+	if site.Name != "" && !isValidSiteName(site.Name) {
+		return nil, ErrInvalidSiteName
+	}
 
 	// Check if domain already exists
 	if _, exists := m.domains[site.Domain]; exists {
@@ -1108,5 +1133,50 @@ func generateRandomString(length int) string {
 		time.Sleep(time.Nanosecond)
 	}
 	return string(b)
+}
+
+// isValidDomain validates a domain name
+func isValidDomain(domain string) bool {
+	if domain == "" || len(domain) > 253 {
+		return false
+	}
+	
+	// Allow localhost for development
+	if domain == "localhost" {
+		return true
+	}
+	
+	// Check for path traversal attempts
+	if strings.Contains(domain, "..") || strings.Contains(domain, "/") || strings.Contains(domain, "\\") {
+		return false
+	}
+	
+	// Check for shell metacharacters
+	dangerousChars := []string{";", "|", "&", "$", "`", "(", ")", "{", "}", "[", "]", "<", ">", "!", "~", "*", "?", "'", "\"", "\n", "\r", "\t"}
+	for _, char := range dangerousChars {
+		if strings.Contains(domain, char) {
+			return false
+		}
+	}
+	
+	// Validate domain format
+	return domainRegex.MatchString(domain) || strings.HasSuffix(domain, ".test") || strings.HasSuffix(domain, ".local")
+}
+
+// isValidSiteName validates a site name
+func isValidSiteName(name string) bool {
+	if name == "" || len(name) > 100 {
+		return false
+	}
+	
+	// Check for dangerous characters that could cause XSS or injection
+	dangerousChars := []string{"<", ">", "\"", "'", "&", ";", "|", "$", "`", "\\", "\n", "\r"}
+	for _, char := range dangerousChars {
+		if strings.Contains(name, char) {
+			return false
+		}
+	}
+	
+	return siteNameRegex.MatchString(name)
 }
 
