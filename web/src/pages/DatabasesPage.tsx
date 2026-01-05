@@ -8,6 +8,7 @@ import {
   Server,
   AlertTriangle,
   Loader2,
+  Key,
 } from 'lucide-react'
 import { api } from '@/lib/api'
 import { getStatusBgColor, cn } from '@/lib/utils'
@@ -38,11 +39,15 @@ export function DatabasesPage() {
   const [status, setStatus] = useState<DatabaseStatus | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showResetPasswordModal, setShowResetPasswordModal] = useState<DatabaseItem | null>(null)
   const [creating, setCreating] = useState(false)
+  const [resettingPassword, setResettingPassword] = useState(false)
   const [installing, setInstalling] = useState(false)
   const [error, setError] = useState('')
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [newDatabase, setNewDatabase] = useState<DatabaseItem | null>(null)
+  const [newPassword, setNewPassword] = useState('')
+  const [showNewPassword, setShowNewPassword] = useState<{ db: DatabaseItem; password: string } | null>(null)
 
   const [form, setForm] = useState({
     name: '',
@@ -116,10 +121,59 @@ export function DatabasesPage() {
     }
   }
 
-  function copyToClipboard(text: string, id: string) {
-    navigator.clipboard.writeText(text)
-    setCopiedId(id)
-    setTimeout(() => setCopiedId(null), 2000)
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!showResetPasswordModal) return
+
+    setError('')
+    setResettingPassword(true)
+
+    try {
+      await api.resetDatabasePassword(showResetPasswordModal.id, newPassword)
+      setShowNewPassword({ db: showResetPasswordModal, password: newPassword })
+      setShowResetPasswordModal(null)
+      setNewPassword('')
+    } catch (err: any) {
+      setError(err.message || 'Failed to reset password')
+    } finally {
+      setResettingPassword(false)
+    }
+  }
+
+  function generateRandomPassword() {
+    const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*'
+    let password = ''
+    for (let i = 0; i < 24; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    setNewPassword(password)
+  }
+
+  async function copyToClipboard(text: string, id: string) {
+    try {
+      // Try the modern clipboard API first
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text)
+      } else {
+        // Fallback for older browsers or non-HTTPS contexts
+        const textArea = document.createElement('textarea')
+        textArea.value = text
+        textArea.style.position = 'fixed'
+        textArea.style.left = '-999999px'
+        textArea.style.top = '-999999px'
+        document.body.appendChild(textArea)
+        textArea.focus()
+        textArea.select()
+        document.execCommand('copy')
+        document.body.removeChild(textArea)
+      }
+      setCopiedId(id)
+      setTimeout(() => setCopiedId(null), 2000)
+    } catch (err) {
+      console.error('Failed to copy:', err)
+      // Still show visual feedback even if copy failed
+      alert('Failed to copy to clipboard. Please copy manually: ' + text)
+    }
   }
 
   if (isLoading) {
@@ -327,6 +381,17 @@ export function DatabasesPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={() => {
+                      setShowResetPasswordModal(db)
+                      setNewPassword('')
+                      setError('')
+                    }}
+                    className="p-2 text-muted-foreground hover:text-amber-400 hover:bg-amber-500/10 rounded-lg transition-colors"
+                    title="Reset password"
+                  >
+                    <Key className="w-4 h-4" />
+                  </button>
+                  <button
                     onClick={() => handleDelete(db)}
                     className="p-2 text-muted-foreground hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                     title="Delete database"
@@ -337,6 +402,51 @@ export function DatabasesPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* New Password Display */}
+      {showNewPassword && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 m-4">
+            <div className="flex items-start gap-3">
+              <Check className="w-6 h-6 text-emerald-400 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="font-semibold text-emerald-400 mb-2">Password Reset Successfully!</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Save this password - it won't be shown again.
+                </p>
+                <div className="bg-secondary/50 rounded-lg p-4 space-y-3">
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Database</p>
+                    <code className="text-sm">{showNewPassword.db.name}</code>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Username</p>
+                    <code className="text-sm">{showNewPassword.db.username}</code>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">New Password</p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-sm font-mono break-all">{showNewPassword.password}</code>
+                      <button
+                        onClick={() => copyToClipboard(showNewPassword.password, 'newpass')}
+                        className="text-muted-foreground hover:text-foreground flex-shrink-0"
+                      >
+                        {copiedId === 'newpass' ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowNewPassword(null)}
+                  className="mt-4 w-full px-4 py-2 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -420,6 +530,81 @@ export function DatabasesPage() {
                     <>
                       <Plus className="w-4 h-4" />
                       Create
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Reset Password Modal */}
+      {showResetPasswordModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-card border border-border rounded-xl w-full max-w-md p-6 m-4">
+            <h2 className="text-xl font-semibold mb-4">Reset Database Password</h2>
+            <p className="text-sm text-muted-foreground mb-4">
+              Reset password for database user <code className="text-foreground">{showResetPasswordModal.username}</code>
+            </p>
+
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-lg mb-4 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4" />
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleResetPassword} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">New Password</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="flex-1 px-3 py-2 bg-secondary border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono text-sm"
+                    placeholder="Enter new password"
+                    required
+                    minLength={8}
+                  />
+                  <button
+                    type="button"
+                    onClick={generateRandomPassword}
+                    className="px-3 py-2 bg-secondary hover:bg-secondary/80 border border-border rounded-lg transition-colors text-sm"
+                    title="Generate random password"
+                  >
+                    Generate
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResetPasswordModal(null)
+                    setError('')
+                    setNewPassword('')
+                  }}
+                  className="flex-1 px-4 py-2 bg-secondary hover:bg-secondary/80 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={resettingPassword}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-50"
+                >
+                  {resettingPassword ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Resetting...
+                    </>
+                  ) : (
+                    <>
+                      <Key className="w-4 h-4" />
+                      Reset Password
                     </>
                   )}
                 </button>

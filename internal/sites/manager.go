@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -440,17 +441,25 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
 	// Create default index.php with beautiful FastCP landing page
 	indexPath := filepath.Join(site.RootPath, site.PublicPath, "index.php")
 	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+		// Escape site name for safe PHP string embedding
+		escapedSiteName := strings.ReplaceAll(site.Name, `\`, `\\`)
+		escapedSiteName = strings.ReplaceAll(escapedSiteName, `'`, `\'`)
+		escapedDomain := strings.ReplaceAll(site.Domain, `\`, `\\`)
+		escapedDomain = strings.ReplaceAll(escapedDomain, `'`, `\'`)
+
 		content := fmt.Sprintf(`<?php
 // Site: %s
 // Domain: %s
 // Powered by FastCP - https://fastcp.org
+$siteName = '%s';
+$siteDomain = '%s';
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= htmlspecialchars('%s') ?> - Powered by FastCP</title>
+    <title><?= htmlspecialchars($siteName) ?> - Powered by FastCP</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -553,7 +562,7 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
 <body>
     <div class="container">
         <div class="logo"><span>F</span></div>
-        <h1><?= htmlspecialchars('%s') ?></h1>
+        <h1><?= htmlspecialchars($siteName) ?></h1>
         <p class="domain"><?= htmlspecialchars($_SERVER['HTTP_HOST']) ?></p>
         
         <div class="card">
@@ -577,7 +586,7 @@ func (m *Manager) createSiteDirectories(site *models.Site) error {
     </div>
 </body>
 </html>
-`, site.Name, site.Domain, site.Name, site.Name)
+`, site.Name, site.Domain, escapedSiteName, escapedDomain)
 		if err := os.WriteFile(indexPath, []byte(content), 0644); err != nil {
 			return err
 		}
