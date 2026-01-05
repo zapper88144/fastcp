@@ -52,7 +52,7 @@ func (g *Generator) GenerateMainProxy(sites []models.Site, phpVersions []models.
 		// Production - enable automatic HTTPS with Let's Encrypt
 		email := cfg.AdminEmail
 		if email == "" {
-			email = "admin@localhost"
+			email = "ssl@fastcp.org" // Default FastCP email
 		}
 		buf.WriteString(fmt.Sprintf(`	
 	# Production mode - automatic HTTPS via Let's Encrypt
