@@ -1,4 +1,15 @@
-package checksudochpasswd
+package broken
+
+// This file was corrupted; kept to avoid accidental deletion. See check_sudo_chpasswd/main.go (new) for the working tool.
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"strings"
+)
+
+func main() {
 
 
 
