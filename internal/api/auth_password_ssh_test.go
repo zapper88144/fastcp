@@ -50,6 +50,11 @@ func TestChangePassword_Success(t *testing.T) {
 		}
 	}()
 
+	// Ensure password change runs the chpasswd path (simulate running as root)
+	oldGetEuid := getEuid
+	getEuid = func() int { return 0 }
+	defer func() { getEuid = oldGetEuid }()
+
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	s := NewServer(nil, nil, nil, nil, nil, nil, nil, logger)
 

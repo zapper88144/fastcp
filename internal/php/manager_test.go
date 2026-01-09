@@ -24,6 +24,9 @@ func TestStartInstanceNonRoot(t *testing.T) {
 		BinaryPath: "",
 		Enabled:    true,
 	}}
+	// Use a temp data dir so tests don't write to the repo or system locations
+	cfg.DataDir = t.TempDir()
+	cfg.LogDir = t.TempDir()
 	// Create a fake 'franken' script that accepts 'run' and sleeps
 	tmpdir := t.TempDir()
 	script := filepath.Join(tmpdir, "fakefranken")

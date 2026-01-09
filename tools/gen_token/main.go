@@ -10,7 +10,7 @@ import (
 
 func main() {
 	cfg, _ := config.Load("")
-	cfg.JWTSecret = cfg.JWTSecret
+	// No-op assignment removed. The token generator uses the loaded config JWT secret.
 	config.Update(cfg)
 	user := &models.User{ID: "0", Username: "root", Role: "admin"}
 	token, err := auth.GenerateToken(user)

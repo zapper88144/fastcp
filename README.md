@@ -115,6 +115,8 @@ cd fastcp
 # Install dependencies
 make install-deps
 
+> **Note:** After installing Node dependencies, please commit `web/package-lock.json` to keep CI reproducible (run `npm install` in `web/` then commit the lockfile).
+
 # Run in development mode
 make dev
 ```
